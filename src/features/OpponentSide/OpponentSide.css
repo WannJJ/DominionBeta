@@ -1,0 +1,117 @@
+header {
+    position: absolute;
+    background-image: linear-gradient(to top right, #ff512f, #f09819);
+    width: 100%;
+    height: 10%;
+    z-index: 2;
+  
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    flex-wrap: wrap;
+    overflow-y: visible;
+    transition: 0.5s;
+  }
+
+
+.opponent-side {
+  height: 90%;
+  aspect-ratio: 10/2;
+  border: 1px solid black;
+  background-color: rgba(168, 175, 250, 0.2);
+  box-shadow: rgba(0, 0, 0, 0.9) 2px 3px 5px;
+
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+
+  transition: transform 0.3s;
+  transform-origin: center center;
+}
+.opponent-side:hover {
+  transform: scale(1.5) translateY(20%);
+  border-radius: 3px;
+}
+.opponent-discard,
+.opponent-deck,
+.opponent-hand {
+  position: relative;
+  height: 90%;
+  aspect-ratio: 1/2;
+  margin-left: 4px;
+  border: 1px solid black;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.opponent-deck{
+  background-size: 100% 100%;
+}
+/*
+.opponent-deck {
+  background-image: url("../img/Basic/Back.JPG");
+}
+  */
+.opponent-hand {
+  aspect-ratio: 1/1;
+}
+.opponent-hand .hand-card {
+  position: absolute;
+  left: 30%;
+  height: 8vh;
+  width: 4vh;
+  margin-left: 4px;
+  /*background-image: url("../img/Basic/Back.JPG");*/
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  transition-property: transform;
+  transition-timing-function: ease-in-out;
+  transition-delay: 0s;
+  transition-duration: 0s;
+}
+.opponent-hand .hand-card:nth-of-type(1) {
+  transform: translateX(-2vh);
+  rotate: -10deg;
+}
+.opponent-hand .hand-card:nth-of-type(3) {
+  transform: translateX(2vh);
+  rotate: 10deg;
+}
+.opponent-side .cards-count {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 80%;
+  height: 0%;
+  padding-bottom: 80%;
+  transform: translate(-50%, -50%);
+  /*background-color: grey;*/
+  box-shadow: inset 0px 0px 2vh 0.001vh grey;
+  border-radius: 100%;
+  text-align: center;
+  padding: auto;
+  margin: auto;
+  color: black;
+  text-shadow: 1px 1px 2px black, 0 0 25px blue, 0 0 5px darkblue;
+  font-size: 1.5vw;
+  line-height: 130%;
+
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+}
+.opponent-score {
+  height: 50%;
+  aspect-ratio: 1/1;
+  margin-left: 4px;
+
+  color: white;
+  text-align: center;
+  text-shadow: 1px 0px 0px black, 0px 1px 0px black, -1px 0px 0px black,
+    0px -1px 0px black, 0 0 1px blue;
+  font-size: 3.5vh;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  /*background-image: url("../img/Basic/VP1.png");*/
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}

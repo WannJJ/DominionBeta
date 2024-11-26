@@ -1,0 +1,406 @@
+import { RootCard, Cost } from '../cards.js';
+import {REASON_SHUFFLE, REASON_START_TURN, REASON_START_BUY, REASON_END_BUY, REASON_START_CLEANUP, REASON_END_TURN, REASON_END_GAME, 
+    REASON_WHEN_PLAY, REASON_WHEN_GAIN, REASON_WHEN_DISCARD, REASON_WHEN_TRASH,
+    REASON_WHEN_BEING_ATTACKED, REASON_WHEN_ANOTHER_GAIN} from '../../reaction_effect_manager.js';
+
+import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
+import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
+import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
+import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
+import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
+import { getSupportHand } from '../../features/SupportHand.jsx';
+
+import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
+import { getPlayer } from '../../player.js';
+import { draw1, drawNCards, mix_discard_to_deck, play_card,
+    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
+    attack_other} from '../../game_logic/Activity.js';
+import { findNonSupplyPile } from '../../features/TableSide/NonSupplyPile.jsx';
+
+
+
+class Boon extends RootCard{
+    constructor(name){
+        super();
+        this.name = name;
+        this.cost = new Cost();
+        this.type = ['Boon']
+        this.src = "./img/Nocturne/Boon/" + name+ ".JPG";
+    }
+    play(){}
+    is_received(){}
+}
+class TheEarthsGift extends Boon{
+    constructor(){
+        super('TheEarthsGift');
+    }
+    is_received(){
+        if(getHand().length() <= 0) return;
+        return new Promise((resolve) => {
+            this.chosen = 0;
+            let clearFunc = function(){
+                getButtonPanel().clear_buttons();
+                getHand().remove_mark();
+            }
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button("Cancel", async function(){
+                clearFunc();
+                resolve('TheEarhsGift finish');
+            }.bind(this));
+            let is_marked = getHand().mark_cards(
+                function(card){return card.type.includes('Treasure') && this.chosen==0;}.bind(this),
+                async function(card){
+                    clearFunc();
+                    this.chosen += 1;  
+                    let c = await discard_card(card, true);
+                    if(c != undefined){
+                        await this.play_step1();
+                    } 
+                    resolve('TheEarhsGift finish');       
+                }.bind(this),
+            'discard');
+            if(!is_marked){
+                clearFunc();
+                resolve('TheEarhsGift finish');
+            }
+        });            
+    }
+    play_step1(){
+        return new Promise((resolve) => {
+            let chosen = 0
+            let is_marked = markSupplyPile(
+                function(pile){
+                    let cost = new Cost(4);
+                    return cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity()>0 && chosen==0;
+                },
+                async function(pile){
+                    chosen = 1;
+                    let new_card = await gain_card(pile);
+                    resolve('TheEarhsGift step 1 finish');    
+                }.bind(this)
+            );
+            if(!is_marked) {
+                resolve('TheEarhsGift step 1 finish'); 
+            }           
+        });        
+    }
+}
+class TheFieldsGift extends Boon{
+    constructor(){
+        super('TheFieldsGift');
+        this.activate_when_start_cleanup = false;
+        this.activate_currently = false;
+    }
+    async is_received(){
+        this.activate_currently = true;
+
+        await getBasicStats().addAction(1);
+        await getBasicStats().addCoin(1);
+    }
+    should_activate(reason, card){
+        return reason == REASON_START_CLEANUP;
+    }
+    async activate(reason, card){
+
+    }
+}
+class TheFlamesGift extends Boon{
+    constructor(){
+        super('TheFlamesGift');
+    }
+    is_received(){
+        if(getHand().length() <= 0) return;
+        return new Promise((resolve) => {
+            let clearFunc = async function(){
+                await getHand().remove_mark();
+                getButtonPanel().clear_buttons();
+            }
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button("Cancel", async function(){
+                await clearFunc();
+                resolve('TheFlamesGift finish');
+            }.bind(this));
+    
+            getHand().mark_cards(
+                function(){return true;},
+                async function(card){
+                    await clearFunc();
+                    await trash_card(card);
+
+                    resolve('TheFlamesGift finish');
+                }.bind(this),
+                'trash',
+            );
+        });
+    }
+}
+class TheForestsGift extends Boon{
+    constructor(){
+        super('TheForestsGift');
+        this.activate_when_start_cleanup = false;
+        this.activate_currently = false;
+    }
+    async is_received(){
+        await getBasicStats().addBuy(1);
+        await getBasicStats().addCoin(1);
+    }
+    should_activate(reason, card){
+        return reason == REASON_END_TURN;
+    }
+    async activate(reason, card){
+
+    }
+}
+class TheMoonsGift extends Boon{
+    constructor(){
+        super('TheMoonsGift');
+    }
+    is_received(){
+        if(getDiscard().length() <= 0) return;
+        return new Promise(async (resolve) => {
+            let chosen = 0;
+            let supportHand = getSupportHand();
+            supportHand.clear();
+            supportHand.getCardAll().forEach(card => card.moon=undefined);
+            while(getDiscard().length() > 0){
+                await supportHand.addCard(await getDiscard().pop());
+            }
+
+            let clearFunc = function(){
+                getButtonPanel().clear_buttons();
+                supportHand.remove_mark();
+                supportHand.clear();
+            }
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button("OK", async function(){
+                await getDiscard().setCardAll(supportHand.getCardAll());
+
+                clearFunc();
+                resolve('TheMoonfGift finish');
+
+            }.bind(this));
+
+            supportHand.mark_cards(
+                function(card){return chosen==0},
+                async function(card){
+                    card.moon = true; 
+                    chosen = 1;
+                    await supportHand.setCardAll(supportHand.getCardAll().filter(card => !card.moon))
+                    await getDiscard().addCardList(supportHand.getCardAll());
+                    await getDeck().addCard(card); 
+
+                    clearFunc();       
+                    resolve('TheMoonsGift finish');
+                }.bind(this));            
+        });
+    }
+}
+class TheMountainsGift extends Boon{
+    constructor(){
+        super('TheMountainsGift');
+    }
+    async is_received(){
+        await gain_card_name('Silver', true);
+    }
+}
+class TheRiversGift extends Boon{
+    constructor(){
+        super('TheRiversGift');
+        this.activate_when_end_turn = true;
+        this.activate_currently = true;
+    }
+    async is_received(){
+
+    }
+    should_activate(reason, card){
+        return reason == REASON_END_TURN;
+    }
+    async activate(reason, card){
+        await draw1();
+    }
+}
+class TheSeasGift extends Boon{
+    constructor(){
+        super('TheSeasGift');
+    }
+    async is_received(){
+        await draw1();
+    }
+}
+class TheSkysGift extends Boon{
+    constructor(){
+        super('TheSkysGift');
+    }
+    is_received(){
+        if(getHand().length() < 3) return;
+        return new Promise((resolve) => {
+            this.chosen = 0;
+            this.card_list = [];
+            let clearFunc = function(){
+                getHand().remove_mark();
+                getButtonPanel().clear_buttons();
+            }
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button("Confirm Discard", async function(){
+                clearFunc();
+                if(this.chosen == 3){
+                    for(let i=0; i<this.card_list.length; i++){
+                        let card = this.card_list[i]
+                        await discard_card(card, true);
+                    }
+                    await gain_card_name('Gold');
+                }
+                resolve('TheEarhsGift finish');
+            }.bind(this));
+            getHand().mark_cards(
+                function(card){return this.chosen<3;}.bind(this),
+                function(card){
+                    this.chosen += 1;
+                    this.card_list.push(card);                    
+                }.bind(this),
+            'discard');
+        });
+    }
+}
+class TheSunsGift extends Boon{
+    constructor(){
+        super('TheSunsGift');
+    }
+    async is_received(){
+        let supportHand = getSupportHand();
+        supportHand.clear();
+        
+        if(getDeck().length() < 4){await mix_discard_to_deck()}
+        const n = Math.min(getDeck().length(), 4);
+        if(n <= 0) return;
+        for(let i=0; i<n; i++){
+            await supportHand.addCard(await getDeck().pop());
+        }
+
+        let cardList = supportHand.getCardAll();
+        cardList.reverse();
+        await supportHand.setCardAll(cardList);
+        supportHand.getCardAll().forEach(card => card.sunsgift=undefined);
+        await this.play_step1();
+        
+        // put the rest back in any order
+        while(supportHand.length() >= 1){
+            await this.play_step2();
+        }
+        supportHand.clear();  
+    }
+    play_step1(){
+        return new Promise(async (resolve)=>{
+            let supportHand = getSupportHand();
+            let clearFunc = function(){
+                getButtonPanel().clear_buttons(); 
+                supportHand.remove_mark();
+            }
+
+            supportHand.mark_cards(
+                function(){return true;},
+                function(card){
+                    card.sunsgift = true;
+                }.bind(this),
+            'discard'); 
+            getButtonPanel().clear_buttons(); 
+            getButtonPanel().add_button("Confirm Discarding", async function(){   
+                let i = 0; 
+                clearFunc();
+
+                while(i < supportHand.length()){
+                    let card = supportHand.getCardAll()[i];
+                    if(card.sunsgift){
+                        await supportHand.remove(card);
+                        await discard_card(card, false);
+                        continue;
+                    }
+                    i++;
+                }      
+                resolve('Sunsgift step 1 finish');
+            }.bind(this));         
+        });
+    }
+    async play_step2(){
+        let supportHand = getSupportHand();
+        if(supportHand.length() == 1){
+            let card = supportHand.getCardAll()[0];
+            await supportHand.remove(card);
+            await getDeck().addCard(card);
+            return;
+        }
+        if(supportHand.length() <= 0) return;
+
+        let clearFunc = function(){
+            getButtonPanel().clear_buttons();
+            supportHand.remove_mark();
+        }
+        return new Promise((resolve) => {
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button('OK', async function(){
+                clearFunc();
+                await getDeck().addCardList(supportHand.getCardAll());
+                supportHand.clear();
+                resolve('Sunsgift step 2 finish');
+            }.bind(this));
+            supportHand.mark_cards(
+                function(){return true;}, 
+                async function(card){
+                    clearFunc();
+                    await supportHand.remove(card);
+                    await getDeck().addCard(card);
+                    resolve('Sunsgift step 2 finish');
+                }.bind(this)
+            );
+        });
+    }
+}
+class TheSwampsGift extends Boon{
+    constructor(){
+        super('TheSwampsGift');
+    }
+    async is_received(){
+        await gain_card_name('Will_o_Wisp');        
+    }
+}
+class TheWindsGift extends Boon{
+    constructor(){
+        super('TheWindsGift');
+    }
+    async is_received(){
+        await drawNCards(2);
+        return new Promise((resolve) => {
+            this.chosen = 0;
+            this.card_list = [];
+            let clearFunc = function(){
+                getHand().remove_mark();
+                getButtonPanel().clear_buttons();
+            }
+            getButtonPanel().clear_buttons();
+            getButtonPanel().add_button("Confirm Discard", async function(){
+                if(this.chosen < 2) return;
+                clearFunc();
+                for(let i=0; i<this.card_list.length; i++){
+                    let card = this.card_list[i];
+                    await discard_card(card);
+                }            
+                resolve();
+            }.bind(this));
+
+            getHand().mark_cards(
+                function(){return this.chosen<2;}.bind(this),
+                function(card){
+                    if(this.chosen < 2){
+                        this.chosen += 1;
+                        this.card_list.push(card);
+                    }                
+                }.bind(this),
+            'discard');
+        });
+    }
+}
+
+export{
+    TheEarthsGift, TheFieldsGift, TheFlamesGift, TheForestsGift, TheMoonsGift, TheMountainsGift, 
+    TheRiversGift, TheSeasGift, TheSkysGift, TheSunsGift, TheSwampsGift, TheWindsGift,
+};
