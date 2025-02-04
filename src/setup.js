@@ -1048,18 +1048,9 @@ function getClassFromName(class_name) {
     return;
   }
 
-  console.log(all_cards);
-
   for (let i = 0; i < all_cards.length; i++) {
     let card_class = all_cards[i];
     let name = new card_class().name;
-    if (i < 10)
-      console.log(
-        card_class.name,
-        card_class,
-        new card_class().name,
-        class_name
-      );
     if (name === class_name) {
       return card_class;
     }
