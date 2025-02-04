@@ -1053,7 +1053,7 @@ function getClassFromName(class_name) {
       return card_class;
     }
   }
-  console.log("CANT FIND THIS CLASS", class_name);
+  console.trace("CANT FIND THIS CLASS", class_name);
   alert("CANT FIND THIS CLASS");
   return undefined;
 }
