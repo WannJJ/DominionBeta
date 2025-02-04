@@ -1,8 +1,8 @@
 import React from "react";
 import '../Components.css';
-import { getAllCards } from "../../setup";
+import { getAllCards, getClassName } from "../../setup";
 
-let all_card_names = getAllCards().map(c => c.name);
+let all_card_names = getAllCards().map(c => getClassName(c));
 //let all_card_names = getAllCards().map(cl => new cl()).map(c => c.name);
 let textInput = null;
 

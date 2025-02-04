@@ -1033,6 +1033,11 @@ class SetupEngine {
   }
 }
 
+const classMap = all_cards.reduce((acc, cls) => {
+  acc[new cls().name] = cls;
+  return acc;
+}, {});
+
 function getClassName(clss) {
   let name = undefined;
   try {
@@ -1048,6 +1053,7 @@ function getClassFromName(class_name) {
     return;
   }
 
+  /*
   for (let i = 0; i < all_cards.length; i++) {
     let card_class = all_cards[i];
     let name = new card_class().name;
@@ -1055,6 +1061,9 @@ function getClassFromName(class_name) {
       return card_class;
     }
   }
+  */
+  let clss = classMap[class_name];
+  if (clss) return clss;
   console.trace("CANT FIND THIS CLASS", class_name);
   alert("CANT FIND THIS CLASS");
   return undefined;
