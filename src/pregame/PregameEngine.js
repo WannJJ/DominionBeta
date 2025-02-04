@@ -99,7 +99,6 @@ const PregameEngine = {
       }
     }
 
-    landscape_effects.push("Pursue");
     //landscape_effects.push("Maelstrom");
 
     return landscape_effects.sort();
