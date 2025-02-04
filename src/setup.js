@@ -1047,6 +1047,9 @@ function getClassFromName(class_name) {
   if (!class_name || class_name === "") {
     return;
   }
+
+  console.log(all_cards.length);
+
   for (let i = 0; i < all_cards.length; i++) {
     let card_class = all_cards[i];
     if (card_class.name === class_name) {
