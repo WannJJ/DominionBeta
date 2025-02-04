@@ -1,5 +1,6 @@
 import React from "react";
 import './display_helper.css';
+import { shuffleArray } from "../../utils/helpers";
 
 let deckDisplay  = null;
 class DeckDisplay extends React.Component{
@@ -25,9 +26,18 @@ class DeckDisplay extends React.Component{
         }));
     }
     render(){
+        let isLandscape = function(card){
+            return card.type.includes('Boon') || card.type.includes("Hex");
+        }
         if(this.state.visible){
             let cardComponentList = this.state.cardList.map((card, index) => 
-                <div key={index} style={{backgroundImage: `url(${card.src})`}}></div>);
+                <div key={index} 
+                    style={{
+                        backgroundImage: `url(${card.src})`,
+                        aspectRatio: `${isLandscape(card)?"8/5":"5/8"}`,
+                        }}>
+
+                    </div>);
             return <div id={this.CSSid}>
                 {cardComponentList}
             </div>
@@ -72,11 +82,6 @@ function slowlyScrollDeckDisplay(){
         }, 100);
     }
 }
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
+
+
 export {DeckDisplay, showCardList, cancelShowCardList};

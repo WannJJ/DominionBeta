@@ -1,19 +1,22 @@
-import {Card, Cost} from '../cards.js';
+import { Card, Cost } from '../cards.js';
 import { Event } from "../landscape_effect.js";
-import {REASON_START_TURN, REASON_WHEN_GAIN} from '../../reaction_effect_manager.js';
+import { REASON_START_TURN, REASON_WHEN_GAIN } from '../../game_logic/ReactionEffectManager.js';
 
-import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
+import { getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-  gain_card, gain_card_name, discard_card, trash_card, reveal_card, exile_card,
-  attack_other} from '../../game_logic/Activity.js';
+import {
+  drawNCards,
+  gain_card, gain_card_name, shuffleCardsIntoDeck, shuffleDeck, trash_card,
+} from '../../game_logic/Activity.js';
 import { getDeck, getDiscard } from '../../features/PlayerSide/CardPile/CardPile.jsx';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { getGameState } from '../../game_logic/GameState.js';
 import { getSupportHand } from '../../features/SupportHand.jsx';
-import { getBasicSupply, getKingdomSupply, markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
+import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
 import { findSupplyPile, findSupplyPileAll } from '../../features/TableSide/SupplyPile.jsx';
 import { getPlayer } from '../../player.js';
+import { PHASE_BUY } from '../../utils/constants.js';
+import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
 /*
 class  extends Event{
     constructor(player){
@@ -32,10 +35,10 @@ class Triumph extends Event {
   }
   async is_buyed() {
     let estate = await gain_card_name("Estate");
-    if (estate != undefined) {
+    if (estate) {
       let card_gained_count = getGameState().cards_gained_this_turn.length;
       await getBasicStats().addVictoryToken(card_gained_count)
-      
+
     }
   }
 }
@@ -59,31 +62,35 @@ class Annex extends Event {
       }
       supportHand.getCardAll().forEach((card) => (card.annex = false));
 
-      let clearFunc = function(){
+      let cardList = [];
+      let clearFunc = function () {
         getButtonPanel().clear_buttons();
+        setInstruction('');
         supportHand.remove_mark();
       }
-
       getButtonPanel().clear_buttons();
+      setInstruction('Annex: Shuffle all but up to 5 cards from discard pile into your deck.');
+
       getButtonPanel().add_button(
         "OK",
         async function () {
-          for(let card of supportHand.getCardAll()){
+          clearFunc();
+          for (let card of supportHand.getCardAll()) {
             if (!card.annex) {
-              await getDeck().addCard(card);
+              cardList.push(card);
             }
           }
-          await getDeck().shuffleDeck();
+
+          await shuffleCardsIntoDeck(cardList);
 
           await supportHand.setCardAll(supportHand.getCardAll().filter((card) => card.annex));
           await getDiscard().addCardList(supportHand.getCardAll());
           supportHand.clear();
           supportHand.hide();
-          clearFunc();
 
           await gain_card_name("Duchy");
           resolve("Annex finish");
-        }.bind(this)
+        }
       );
 
       supportHand.mark_cards(
@@ -94,14 +101,14 @@ class Annex extends Event {
           card.annex = true;
           this.chosen += 1;
           this.card_list.push(card);
-        }.bind(this)
+        }.bind(this),
+        'discard',
       );
     });
   }
 }
 class Donate extends Event {
   constructor(player) {
-    //Debt
     super("Donate", new Cost(0, 8), "Empires/Event/", player);
     this.activate_when_start_turn = true;
     this.activate_currently = false;
@@ -113,29 +120,31 @@ class Donate extends Event {
     this.turn = getPlayer().turn;
   }
   should_activate(reason, card) {
-    if(this.turn + 1 != getPlayer().turn){
+    if (this.turn + 1 !== getPlayer().turn) {
       this.activate_currently = false;
       return false;
     }
-    return reason == REASON_START_TURN;
+    return reason === REASON_START_TURN;
   }
   async activate() {
     this.activate_currently = false;
     getButtonPanel().clear_buttons();
-    await getHand().addCard(getDeck().getCardAll());
-    await getDeck.setCardAll([])
-    await getHand().addCard(getDiscard().getCardAll());
+    await getHand().addCardList(getDeck().getCardAll());
+    await getDeck().setCardAll([])
+    await getHand().addCardList(getDiscard().getCardAll());
     await getDiscard().setCardAll([]);
     return new Promise((resolve) => {
       this.chosen = 0;
       this.card_list = [];
 
-      let clearFunc = async function(){
+      let clearFunc = async function () {
         getButtonPanel().clear_buttons();
+        setInstruction('');
         await getHand().remove_mark();
       }
-
       getButtonPanel().clear_buttons();
+      setInstruction('Donate: Trash any number of cards, then shuffle the rest into your deck.');
+
       getButtonPanel().add_button(
         "Confirm Trashing",
         async function () {
@@ -165,8 +174,8 @@ class Donate extends Event {
   }
   async activate_step1() {
     await getDeck().setCardAll(getHand().getCardAll());
-    await getDeck().shuffleDeck();
     await getHand().setCardAll([]);
+    await shuffleDeck();
     await drawNCards(5);
   }
 }
@@ -182,7 +191,7 @@ class Advance extends Event {
       this.card = null;
       this.chosen = 0;
 
-      let clearFunc = async function(){
+      let clearFunc = async function () {
         getButtonPanel().clear_buttons();
         await getHand().remove_mark();
       }
@@ -191,12 +200,12 @@ class Advance extends Event {
       getButtonPanel().add_button(
         "Confirm Trashing",
         async function () {
-          if (this.chosen == 1 && this.card != null) {
+          if (this.chosen === 1 && this.card) {
             await trash_card(this.card);
             await clearFunc();
             await this.is_buyed_step1();
           }
-          
+
           resolve("Advance finish");
         }.bind(this)
       );
@@ -204,13 +213,13 @@ class Advance extends Event {
       getHand().mark_cards(
         function (card) {
           return (
-            this.chosen == 0 &&
-            this.card == null &&
-            card.type.includes("Action")
+            this.chosen === 0 &&
+            !this.card &&
+            card.type.includes(Card.Type.ACTION)
           );
         }.bind(this),
         function (card) {
-          if (this.chosen == 0) {
+          if (this.chosen === 0) {
             this.chosen += 1;
             this.card = card;
           }
@@ -221,25 +230,24 @@ class Advance extends Event {
   }
   is_buyed_step1() {
     let chosen = 0;
-    return new Promise((resolve) =>{
+    return new Promise((resolve) => {
       markSupplyPile(
         function (pile) {
           let cost = new Cost(6);
           return (
-            pile.getType().includes("Action") &&
+            pile.getType().includes(Card.Type.ACTION) &&
             cost.isGreaterOrEqual(pile.getCost()) &&
             pile.getQuantity() > 0 &&
-            chosen == 0
+            chosen === 0
           );
         },
         async function (pile) {
           chosen += 1;
-          let new_card = await gain_card(pile, false);
-          await getHand().addCard(new_card);
+          await gain_card(pile);
 
           removeMarkSupplyPile();
           resolve("Advance buyed step 1 finish");
-        }.bind(this)
+        }
       );
     });
   }
@@ -260,36 +268,35 @@ class Tax extends Event {
     this.activate_permanently = true;
     this.description = "Add 2D to a Supply pile.Setup: Add 1D to each Supply pile. When a player gains a card in their Buy phase, they take the D from its pile.";
   }
-  async setup(){
-    for(let pile of findSupplyPileAll(p => true)){
+  async setup() {
+    for (let pile of findSupplyPileAll(p => true)) {
       await pile.setDebtToken(pile.getDebtToken() + 1);
     }
   }
 
   is_buyed() {
-    return new Promise((resolve) =>{
+    return new Promise((resolve) => {
       markSupplyPile(
         p => true,
-        async function(pile){
+        async function (pile) {
           await pile.setDebtToken(pile.getDebtToken() + 2);
           removeMarkSupplyPile();
           resolve('Tax finish');
-        }.bind(this)
+        }
       );
     });
   }
-  should_activate(reason, card){ 
-    return reason == REASON_WHEN_GAIN
-      && card != undefined
-      && getPlayer().phase === 'buy'
-      && findSupplyPile(pile => pile.getName() === card.name) != undefined
-      && findSupplyPile(pile => pile.getName() === card.name).getDebtToken() > 0;
+  should_activate(reason, card) {
+    return reason === REASON_WHEN_GAIN
+      && card
+      && getPlayer().phase === PHASE_BUY
+      && findSupplyPile(pile => pile.isOriginOf(card))
+      && findSupplyPile(pile => pile.isOriginOf(card)).getDebtToken() > 0;
   }
-  async activate(reason, card){ 
-    if(card == undefined) return;
-    let pile = findSupplyPile(pile => pile.getName() === card.name);
-    if(pile == undefined) return;
-    if(pile == undefined || pile.getDebtToken() <= 0) return;
+  async activate(reason, card) {
+    if (!card) return;
+    let pile = findSupplyPile(pile => pile.isOriginOf(card));
+    if (!pile || pile.getDebtToken() <= 0) return;
     await getBasicStats().addDebt(pile.getDebtToken());
     await pile.setDebtToken(0);
   }
@@ -312,16 +319,16 @@ class Banquet extends Event {
           return (
             cost.isGreaterOrEqual(pile.getCost()) &&
             pile.getQuantity() > 0 &&
-            !pile.getType().includes("Victory") &&
-            chosen == 0
+            !pile.getType().includes(Card.Type.VICTORY) &&
+            chosen === 0
           );
         },
         async function (pile) {
           chosen += 1;
-          let new_card = await gain_card(pile);
+          await gain_card(pile);
           removeMarkSupplyPile();
           resolve("Banquet finish");
-        }.bind(this)
+        }
       );
     });
   }
@@ -334,7 +341,7 @@ class Ritual extends Event {
   }
   async is_buyed() {
     let curse = await gain_card_name("Curse");
-    if (curse != undefined) {
+    if (curse) {
       await this.is_buyed_step1();
     }
   }
@@ -346,7 +353,7 @@ class Ritual extends Event {
 
       getHand().mark_cards(
         function (card) {
-          return this.chosen == 0;
+          return this.chosen === 0;
         }.bind(this),
         async function (card) {
           this.chosen += 1;
@@ -374,17 +381,15 @@ class Salt_the_Earth extends Event {
       let chosen = 0;
       let is_marked = markSupplyPile(
         function (pile) {
-          return (
-            pile.getQuantity() > 0 && pile.getType().includes("Victory") && chosen == 0
-          );
+          return pile.getQuantity() > 0 && pile.getType().includes(Card.Type.VICTORY) && chosen === 0;
         },
         async function (pile) {
           chosen += 1;
           removeMarkSupplyPile();
-          let card = await gain_card(pile);
+          let card = await pile.popNextCard();
           await trash_card(card, false);
           resolve("Salt the Earth finish");
-        }.bind(this)
+        }
       );
       if (!is_marked) {
         removeMarkSupplyPile();
@@ -413,7 +418,7 @@ class Windfall extends Event {
     this.description = "If your deck and discard pile are empty, gain 3 Golds.";
   }
   async is_buyed() {
-    if (getDeck().getLength() == 0 && getDiscard().length() == 0) {
+    if (getDeck().getLength() === 0 && getDiscard().length() === 0) {
       await gain_card_name("Gold");
       await gain_card_name("Gold");
       await gain_card_name("Gold");
@@ -430,7 +435,7 @@ class Conquest extends Event {
     await gain_card_name("Silver");
     await gain_card_name("Silver");
     let silver_count = getGameState().cards_gained_this_turn.filter(
-      (c) => c.name == "Silver"
+      (c) => c.name === "Silver"
     ).length;
     await getBasicStats().addVictoryToken(silver_count);
   }
@@ -442,7 +447,7 @@ class Dominate extends Event {
   }
   async is_buyed() {
     let province = await gain_card_name("Province");
-    if (province != undefined) {
+    if (province) {
       await getBasicStats().addVictoryToken(9);
     }
   }

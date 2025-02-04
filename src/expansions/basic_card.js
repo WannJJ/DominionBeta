@@ -2,6 +2,7 @@ import {Card, Cost} from './cards.js';
 import { getBasicStats } from '../features/PlayerSide/PlayerSide.jsx';
 import { opponentManager } from '../features/OpponentSide/Opponent.js';
 import { getPlayer } from '../player.js';
+import audioManager from '../Audio/audioManager.js';
 //Basic Cards
 class Copper extends Card{
     constructor(player){
@@ -85,11 +86,7 @@ class Curse extends Card{
     }
     async is_gained(){
         await getBasicStats().addScore(-1);
-        var audio = new Audio('./sound/crow.mp3');
-        audio.autoplay = true;
-        audio.playsinline = true;
-        audio.muted = false;
-        audio.click();
+        audioManager.playSound('crow');
     }
     async is_trashed(){
         await getBasicStats().addScore(1);

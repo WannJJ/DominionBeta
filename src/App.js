@@ -1,75 +1,88 @@
-import React from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import './App.css';
-import { OpponentSide } from './features/OpponentSide/OpponentSide.jsx';
-import {PlayerSide} from './features/PlayerSide/PlayerSide.jsx';
-import {TableSide} from './features/TableSide/TableSide.jsx';
-import { Logger } from './Components/Logger.jsx';
-import { SupportHand } from './features/SupportHand.jsx';
-import { CardDisplay } from './Components/display_helper/CardDisplay.jsx';
-import { DeckDisplay } from './Components/display_helper/DeckDisplay.jsx';
-import { SettingButton } from './features/SettingButton.jsx';
+import { AppContext } from './contexts/AppContext.jsx';
 
+import SigninPage from './features/SigninPage/SigninPage.jsx';
+import LobbyPage from './features/LobbyPage/LobbyPage.jsx';
+import ProtectedRoute from './features/routes/ProtectedRoute.jsx';
 import Result from './features/AfterGame/Result.jsx';
-import { GameEngine } from './main.js';
+import MainPage from './features/MainPage/MainPage.jsx';
+import { GameEngine, MULTIPLAYER_MODE } from './main.js';
 
-import Backdrop from '@mui/material/Backdrop';
-import CircularProgress from '@mui/material/CircularProgress';
-
-
+import { CheckAuthHook } from './api/signin.js';
 
 
-class App extends React.Component{
-  constructor(props){
-    super(props);
-    this.state = {
-      headerShow: true,
-      rightSideShow: true,
-    };
-  }
-  openNav(){
-    this.setState((prevState) => ({
-      headerShow: !prevState.headerShow
-    }));
-  }
-  toggleChat(){
-    this.setState((prevState) => ({
-      rightSideShow: !prevState.rightSideShow
-    }));
-  }
-  render(){
-    let headerHeight = (this.state  .headerShow)?"10%":"0%",
-        body2Height = (this.state.headerShow)?"90%":"100%",
-        leftSideWidth = (this.state.rightSideShow)?"85%":"100%",
-        rightSideWidth = (this.state.rightSideShow)?"15%":"0%";
-    return <div id='body1' >
-              
+const App = () =>{
+  
+  const { isAuthenticated, isGameStarted, isGameEnded } = useContext(AppContext);
+  const {check_auth} = CheckAuthHook();
+
+
+
+  useEffect(() =>{
+    if(MULTIPLAYER_MODE) check_auth();
+  }, []); // // Dependency array trống, chỉ chạy một lần khi component mount
+
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Route SigninPage */}
+        <Route
+          path="/signin"
+          element={
+            <ProtectedRoute
+              condition={!isAuthenticated && MULTIPLAYER_MODE}
+              redirectTo="/lobby"
+            >
+              <SigninPage />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Route LobbyPage */}
+        <Route 
+          path="/lobby"
+          element={
+            <ProtectedRoute
+              condition={MULTIPLAYER_MODE && isAuthenticated && !isGameStarted}
+              redirectTo="/"
+            >
+              <LobbyPage />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Route MainPage */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute
+              condition={!MULTIPLAYER_MODE || (isAuthenticated && isGameStarted) }
+              redirectTo="/result"
+            >
+              <MainPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Route Result */}
+        <Route 
+          path="/result"
+          element={
+            <ProtectedRoute
+            condition={isGameEnded}
+            redirectTo="/signin"
+            >
               <Result />
-              <DeckDisplay />
-              <CardDisplay />
-              <SupportHand />
-
-              
-            <OpponentSide headerHeight={headerHeight} />
-            <div id='body2' style={{height: body2Height, top: headerHeight}}>
-              <div style={{position: "absolute", left: "20%", fontSize:"20px",cursor:"pointer", zIndex:3}} 
-                  onClick={this.openNav.bind(this)}>&#9776;</div>
-              <div id='left-side' style={{width: leftSideWidth}}>
-                  <TableSide />
-                  <PlayerSide />
-              </div>
-              <div style={{position:'absolute', right:"1%", bottom:"5%", cursor:"pointer", zIndex:3}} 
-                      onClick={this.toggleChat.bind(this)}>&#9776;</div>
-              <div id='right-side' style={{width: rightSideWidth}}>
-                  <Logger />
-                  <SettingButton />
-              </div>
-            </div>
-        </div>; 
-  }
-  async componentDidMount(){
-    let engine = new GameEngine();
-    await engine.run();
-  }
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    
+    </BrowserRouter>
+  );
 }
   
 

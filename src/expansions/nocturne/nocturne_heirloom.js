@@ -1,13 +1,7 @@
 import {Card, Cost} from '../cards.js';
 
 import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card,
-    attack_other,
-    receive_boon_hex,
-    set_aside_card,
-    receive_state} from '../../game_logic/Activity.js';
+import { gain_card, gain_card_name, discard_card, trash_card,} from '../../game_logic/Activity.js';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
 import { getPlayer } from '../../player.js';

@@ -26,6 +26,7 @@ class CardHolder extends React.Component{
     }
     addCard(card){
         if(!(card instanceof RootCard)){
+            console.error(card);
             throw new Error('INVALID Card');
         }
         if(this.hasCardId(card.id)) return false;
@@ -40,7 +41,7 @@ class CardHolder extends React.Component{
             this.add_card_list(card);
         }
         else{
-            if(card==undefined || card.name==undefined || card.type==undefined || card.id==undefined){
+            if(!card|| !card.name || !card.type || !card.id){
                 throw new Error('INVALID Card');
             }
             if(!this.hasCardId(card.id)){
@@ -100,18 +101,17 @@ class CardHolder extends React.Component{
         return undefined;
     }
     remove(card){
-        if(card == undefined || card.id == undefined) return undefined;
+        if(!card|| !card.id) return undefined;
         let card_list = this.state.cards;
         let index = card_list.indexOf(card);
-        if (index == -1) {
+        if (index === -1) {
             index = card_list.map(c => c.id).indexOf(card.id);
-            if(index == -1){
+            if(index === -1){
                 return undefined;
             } else{
                 card_list.splice(index, 1);
             }
-        }
-        else{
+        } else{
             card_list.splice(index, 1); 
         }
         return new Promise((resolve) => {
@@ -137,7 +137,7 @@ class CardHolder extends React.Component{
     }
     hasCardId(id){
         for(let card of this.state.cards){
-            if(card.id == id){
+            if(card.id === id){
                 return true;
             }
         }
@@ -145,26 +145,27 @@ class CardHolder extends React.Component{
     }
     getCardById(id){
         for(let card of this.state.cards){
-            if(card.id == id){
+            if(card.id === id){
                 return card;
             }
         }
         return undefined;
     }
-    removeCardById(id){
+    async removeCardById(id){
         let card = this.getCardById(id);
-        if(card != undefined){
-            this.remove(card);
+        let removed = undefined;
+        if(card){
+            removed = await this.remove(card);
         }
-        return card;
+        return removed;
     }
     makeSelection(card){
         this.selectedList.push(card);
     }
     cancelSelection(card){
-        this.selectedList = this.selectedList.filter(c => c != card);
+        this.selectedList = this.selectedList.filter(c => c.id !== card.id);
     }
-    onContextMenuFunction(){}
+    onContextMenuFunction(){}   
     async onChildClickFunction(card){
         await new Promise((resolve) =>{
             this.forceUpdate(resolve);
@@ -191,6 +192,7 @@ class CardHolder extends React.Component{
             </div>
     }
     mark_cards(filterFunc, onClickFunc, selectType=SELECT_CHOOSE, unclick=false){
+        if(![SELECT_CHOOSE, SELECT_DISCARD, SELECT_TRASH].includes(selectType)) selectType = SELECT_CHOOSE;
         this.selectedList = [];
         if(!this.has_card(filterFunc)) return false;
         this.setState({
@@ -219,7 +221,7 @@ class CardHolder extends React.Component{
     createMockObject(){
         let card_list = [];
         for(let card of this.state.cards){
-            if(!card instanceof RootCard) alert('INVALID Card in cardHolder');
+            if(!(card instanceof RootCard)) alert('INVALID Card in cardHolder');
             card_list.push(card.createMockObject());
         }
         return {type: this.id,
@@ -227,11 +229,11 @@ class CardHolder extends React.Component{
             cards: card_list};
     }
     async parseDataFromMockObject(mockObj){
-        if(mockObj == undefined || mockObj.cards == undefined || mockObj.type == undefined){
+        if(!mockObj || !mockObj.cards|| !mockObj.type){
             throw new Error('INVALID Mock Card Holder');
         }
         let card_list = [];
-        if(CardHolder.generateCardFromMockObject != undefined){
+        if(CardHolder.generateCardFromMockObject){
             for(let cardObj of mockObj.cards){
                 let new_card = CardHolder.generateCardFromMockObject(cardObj);
                 card_list.push(new_card);
@@ -280,29 +282,6 @@ class Hand extends CardHolder{
     }
     onContextMenuFunction(){
         return;
-        /*
-        if(this.state.filterFunc == null){        
-        this.mark_cards(
-            function(card){
-                return this.selectedList.length < 2;
-            }.bind(this),
-            function(card){
-                if(this.selectedList.length == 3) {
-                    let selectedList = this.selectedList;
-                    this.remove_mark();
-                    let id = setInterval(()=>{
-                        let c = selectedList.shift();
-                        if(selectedList.length == 0) clearInterval(id);
-                    }, 2000);
-                }
-            }.bind(this),
-            'trash',
-            true,
-        );
-        } else {
-            this.remove_mark();
-        }
-        */
     }    
 }
 

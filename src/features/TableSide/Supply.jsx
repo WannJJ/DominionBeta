@@ -44,7 +44,7 @@ class Supply extends React.Component{
                             key={index}
                             filterFunc={this.state.filterFunc}
                             onClickFunc={this.state.onClickFunc}
-                            ref={(e)=>{if(e!==null)this.pile_list.push(e)}}
+                            ref={(e)=>{if(e!=null)this.pile_list.push(e)}}
                             />
         );
         return <div id={this.id} className='card-container'
@@ -124,6 +124,14 @@ class KingdomSupply extends Supply{
     }
 
     arrange(class_list){
+        return class_list.sort(function(clss1, clss2){
+            const card1 = new clss1(),
+                card2 = new clss2(),
+                cost1 = card1.cost,
+                cost2 = card2.cost;
+            if(cost1.coin === cost2.coin) return cost1.debt - cost2.debt;
+            return cost1.coin - cost2.coin;
+        });
         return class_list.sort((clss1, clss2) => new clss1().cost.coin - new clss2().cost.coin);
     }
 }
@@ -141,7 +149,7 @@ function findSupplyPile(callback){
     return getKingdomSupply().find_pile(callback);
 }
 function markSupplyPile(filterFunc, onClickFunc){
-    if(findSupplyPile(filterFunc) === undefined) return false;
+    if(!findSupplyPile(filterFunc)) return false;
     getBasicSupply().mark_piles(filterFunc, onClickFunc);
     getKingdomSupply().mark_piles(filterFunc, onClickFunc);
     return true;

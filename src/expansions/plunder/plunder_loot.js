@@ -1,21 +1,23 @@
 import {Card, Cost} from '../cards.js';
 import {REASON_START_TURN, REASON_END_TURN, 
     REASON_WHEN_GAIN, 
-    REASON_WHEN_BEING_ATTACKED} from '../../game_logic/ReactionEffectManager.js';
+    REASON_FIRST_WHEN_ANOTHER_PLAYS} from '../../game_logic/ReactionEffectManager.js';
 
 import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
 import { getPlayer } from '../../player.js';
 import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
-import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
-import { getNativeVillageMat, getIslandMat } from '../../features/PlayerSide/BottomLeftCorner/PlayerMats.jsx';
+import { getDiscard, getDeck } from '../../features/PlayerSide/CardPile/CardPile.jsx';
+import { getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
+
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
 import { getSupportHand } from '../../features/SupportHand.jsx';
 import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
-    attack_other} from '../../game_logic/Activity.js';
+import { drawNCards, mix_discard_to_deck, play_card,
+    gain_card, gain_card_name, 
+    discard_card, trash_card, reveal_card, set_aside_card,
+    attack_other,
+    mayPlayCardFromHand} from '../../game_logic/Activity.js';
 
 /*
 class  extends Card{
@@ -53,7 +55,7 @@ class Amphora extends Card{
         });
     } 
     should_activate(reason, card){
-        return reason == REASON_START_TURN;
+        return reason === REASON_START_TURN;
     }
     async activate(reason, card){
         this.not_discard_in_cleanup = false;
@@ -84,7 +86,7 @@ class EndlessChalice extends Card{
         await getBasicStats().addBuy(1);
     } 
     should_activate(reason, card){
-        return reason == REASON_START_TURN;
+        return reason === REASON_START_TURN;
     }
     async activate(reason, card){
         await this.play();
@@ -93,19 +95,21 @@ class EndlessChalice extends Card{
 class Figurehead extends Card{
     constructor(player){
         super("Figurehead", new Cost(7), Card.Type.TREASURE + " " + Card.Type.DURATION + " " + Card.Type.LOOT, "Plunder/Loot/", player);
-        this.not_discard_in_cleanup = true;
-        this.activate_when_start_turn = true;
+        this.not_discard_in_cleanup = false;
+        this.activate_when_start_turn = false;
         this.activate_when_in_play = true;
     }
     async play(){
         this.not_discard_in_cleanup = true;
+        this.activate_when_start_turn = true;
         await getBasicStats().addCoin(3);
     }
     should_activate(reason, card){
-        return reason == REASON_START_TURN;
+        return reason === REASON_START_TURN;
     }
     async activate(){
         this.not_discard_in_cleanup = false;
+        this.activate_when_start_turn = false;
         await drawNCards(2);
     }
 }
@@ -123,9 +127,9 @@ class Hammer extends Card{
                 },
                 async function(pile){
                     removeMarkSupplyPile();
-                    let new_card = await gain_card(pile, true);                
+                    await gain_card(pile);                
                     resolve('Hammer finish');
-                }.bind(this)
+                }
             );
         });
     } 
@@ -135,50 +139,62 @@ class Insignia extends Card{
         super("Insignia", new Cost(7), Card.Type.TREASURE + " "  + Card.Type.LOOT, "Plunder/Loot/", player);
         this.activate_when_gain = true;
         this.activate_when_in_play = true;
+        this.turn = -1;
         this.description = 'This turn, when you gain a card, you may put it onto your deck.';
     }
     async play(){
         await getBasicStats().addCoin(3);
+        this.turn = getPlayer().turn;
     }
-    should_activate(reason, card){
-        return reason == REASON_WHEN_GAIN && card != undefined 
-                && getDiscard().has_card(c => c.id == card.id);
+    should_activate(reason, card, activity, cardLocationTrack){
+        return reason === REASON_WHEN_GAIN
+            && card
+            && getPlayer().turn === this.turn
+            //&& getDiscard().has_card(c => c.id === card.id);
     }
-    async activate(reason, card){
-        if(card == undefined || !getDiscard().has_card(c => c.id == card.id)) return;
+    async activate(reason, card, activity, cardLocationTrack){
+        if(!card || !cardLocationTrack) return;
+        let cardLocation = cardLocationTrack.getLocation();
+        if(!cardLocation || !cardLocation.getCardById(card.id)) return;
+
         return new Promise((resolve) =>{
             getButtonPanel().clear_buttons();
             getButtonPanel().add_button(`Top deck ${card.name}`, async function(){
                 getButtonPanel().clear_buttons();
-                await getDiscard().remove(card);
-                getDeck().addCard(card);
+                let removed = await cardLocation.removeCardById(card.id);
+                if(removed){
+                     await getDeck().topDeck(card);
+                     if(cardLocation.id !== getDeck().id) cardLocationTrack.setLocation();
+                }
                 resolve('Insignia finish');
-            }.bind(this));
+            });
             getButtonPanel().add_button('Cancel', function(){
                 getButtonPanel().clear_buttons();
                 resolve('Insignia finish');
-            }.bind(this));
+            });
         });
     }
 }
 class Jewels extends Card{
     constructor(player){
         super("Jewels", new Cost(7), Card.Type.TREASURE + " " + Card.Type.DURATION + " " + Card.Type.LOOT, "Plunder/Loot/", player);
-        this.not_discard_in_cleanup = true;
-        this.activate_when_start_turn = true;
+        this.not_discard_in_cleanup = false;
+        this.activate_when_start_turn = false;
         this.activate_when_in_play = true;
     }
     async play(){
         this.not_discard_in_cleanup = true;
+        this.activate_when_start_turn = true;
         await getBasicStats().addCoin(3);
     }
     
     should_activate(reason, card){
-        return reason == REASON_START_TURN;
+        return reason === REASON_START_TURN;
     }
     async activate(reason, card){
         this.not_discard_in_cleanup = false;
-        if(getPlayField().has_card(c => c == this)){
+        this.activate_when_start_turn = false;
+        if(getPlayField().has_card(c => c === this)){
             await getPlayField().remove(this);
             await getDeck().bottomDeck(this);
         }
@@ -204,18 +220,22 @@ class Orb extends Card{
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
                 supportHand.remove_mark();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('Choose one: Play an Action or Treasure; or +1 Buy +$3');
+
             getButtonPanel().add_button("+1 Buy +3$", async function(){
                 clearFunc();
                 await getBasicStats().addBuy(1);
                 await getBasicStats().addCoin(3);
                 supportHand.setCardAll(supportHand.state.cards.filter(card => !card.orb));
                 await getDiscard().addCardList(supportHand.getCardAll());
+
                 supportHand.clear();           
                 resolve('Orb finish');
 
-            }.bind(this));
+            });
 
             supportHand.mark_cards(card => card.type.includes('Treasure') || card.type.includes('Action'),
                 async function(card){
@@ -223,10 +243,11 @@ class Orb extends Card{
                     card.orb = true; 
                     supportHand.setCardAll(supportHand.state.cards.filter(card => !card.orb))
                     await getDiscard().addCardList(supportHand.state.cards);
+
                     supportHand.clear();
                     await play_card(card);            
                     resolve('Orb finish');
-                }.bind(this));            
+                });            
         });
     } 
 }
@@ -243,23 +264,26 @@ class PrizeGoat extends Card{
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
                 getHand().remove_mark();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('You may trash a card from your hand');
+
             getButtonPanel().add_button("Cancel", async function(){
                 clearFunc()
                 resolve('PrizeGoat finish');
-            }.bind(this));
+            });
 
             getHand().mark_cards(
-                function(){return chosen<1;}.bind(this), 
+                function(){return chosen<1;}, 
                 async function(card){
-                    if(chosen == 0){
+                    if(chosen === 0){
                         chosen += 1;
                         clearFunc();
                         await trash_card(card);
                     }
                     resolve('PrizeGoat finish');
-                }.bind(this),
+                },
                 'trash');
         });
     } 
@@ -267,7 +291,7 @@ class PrizeGoat extends Card{
 class PuzzleBox extends Card{
     constructor(player){
         super("PuzzleBox", new Cost(7), Card.Type.TREASURE + " "  + Card.Type.LOOT, "Plunder/Loot/", player);
-        this.not_discard_in_cleanup = true;
+        this.not_discard_in_cleanup = false;
         this.activate_when_end_turn = true;
         this.activate_when_in_play = true;
         this.chosen_id = null;
@@ -283,8 +307,11 @@ class PuzzleBox extends Card{
             let clearFunc = function(){
                 getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('You may set aside a card from your hand face down');
+
             getButtonPanel().add_button('Cancel', function(){
                 clearFunc();
                 this.not_discard_in_cleanup = false;
@@ -294,7 +321,7 @@ class PuzzleBox extends Card{
                 function(card){ return this.chosen <= 0;}.bind(this),
                 function(card){
                     clearFunc();
-                    this.chosen = 1;
+                    this.chosen += 1;
                     getHand().remove(card);
                     set_aside_card(card);
                     this.chosen_card = card;
@@ -306,16 +333,15 @@ class PuzzleBox extends Card{
         });
     }   
     should_activate(reason, card){
-        if(this.chosen_id == null || !getSetAside().has_card(c => c.id == this.chosen_id)){
+        if(!this.chosen_id|| !getSetAside().has_card(c => c.id === this.chosen_id)){
             this.not_discard_in_cleanup = false;
             return false;
         }
-        return reason == REASON_END_TURN;
+        return reason === REASON_END_TURN;
     }  
     async activate(reason, card){
         this.not_discard_in_cleanup = false;
-        if(this.chosen_id != null 
-            && getSetAside().has_card(c => c.id == this.chosen_id)){
+        if(this.chosen_id && getSetAside().has_card(c => c.id === this.chosen_id)){
             let card = await getSetAside().removeCardById(this.chosen_id);
             await getHand().addCard(card);
         }
@@ -353,13 +379,16 @@ class Sextant extends Card{
             let clearFunc = function(){
                 getButtonPanel().clear_buttons(); 
                 supportHand.remove_mark();
+                setInstruction('');
             }   
-            getButtonPanel().clear_buttons();       
+            getButtonPanel().clear_buttons();      
+            setInstruction('Discard any number of cards');            
+
             supportHand.mark_cards(
                 function(){return true;},
                 function(card){
                     card.sextant = true;
-                }.bind(this), 
+                }, 
             'discard'); 
             getButtonPanel().add_button("Confirm Discarding", async function(){   
                 clearFunc();
@@ -374,12 +403,12 @@ class Sextant extends Card{
                     i++;
                 }      
                 resolve('Sextant finish');
-            }.bind(this));         
+            });         
         });
     }
     async play_step2(){
         let supportHand = getSupportHand(); 
-        if(supportHand.length() == 1){
+        if(supportHand.length() === 1){
             let card = supportHand.state.cards[0];
             await supportHand.remove(card);
             getDeck().addCard(card);
@@ -390,14 +419,17 @@ class Sextant extends Card{
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
                 supportHand.remove_mark();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('Put the rest back in any order');
+
             getButtonPanel().add_button('OK', async function(){
                 clearFunc();
                 await getDeck().addCardList(supportHand.state.cards.reverse());
                 supportHand.clear();
                 resolve();
-            }.bind(this));
+            });
             supportHand.mark_cards(
                 function(){return true;}, 
                 async function(card){
@@ -405,14 +437,14 @@ class Sextant extends Card{
                     await supportHand.remove(card);
                     await getDeck().addCard(card);
                     resolve();
-                }.bind(this));
+                });
         });
     }
 }
 class Shield extends Card{
     constructor(player){
         super("Shield", new Cost(7), Card.Type.TREASURE + " "+ Card.Type.REACTION + " "  + Card.Type.LOOT, "Plunder/Loot/", player);
-        this.activate_when_another_attacks = true;
+        this.activate_first_when_another_plays = true;
         this.activate_when_in_hand = true;
         this.description = 'When another player plays an Attack, you may first reveal this from your hand to be unaffected.';
     }
@@ -420,23 +452,26 @@ class Shield extends Card{
         await getBasicStats().addBuy(1);
         await getBasicStats().addCoin(3);
     } 
-    do_reaction(){
-        
-    }
     should_activate(reason, card){
-        return reason == REASON_WHEN_BEING_ATTACKED && !getPlayer().can_not_be_attacked;
+        return reason === REASON_FIRST_WHEN_ANOTHER_PLAYS && card && card.type.includes(Card.Type.ATTACK);
     }
     activate(reason, card){
         return new Promise((resolve) =>{
-            getButtonPanel().clear_buttons();
-            getButtonPanel().add_button('Play Shield', async function(){
+            let clearFunc = function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
+            }
+            getButtonPanel().clear_buttons();
+            setInstruction('Shield: You may reveal Shield to be unaffected by Attack.');
+
+            getButtonPanel().add_button('Reveal Shield', async function(){
+                clearFunc();
                 await reveal_card(this);
-                getPlayer().can_not_be_attacked = true;
+                getPlayer().unaffected_id_list.push(card.id);
                 resolve();
             }.bind(this));
-            getButtonPanel().add_button('Cancel', function(){
-                getButtonPanel().clear_buttons();
+            getButtonPanel().add_button('Decline', function(){
+                clearFunc();
                 resolve();
             });
         });
@@ -446,24 +481,51 @@ class SpellScroll extends Card{
     constructor(player){
         super("SpellScroll", new Cost(7), Card.Type.ACTION + " "+ Card.Type.TREASURE + " "  + Card.Type.LOOT, "Plunder/Loot/", player);
     }
-    play(){
-        return new Promise((resolve) => {
+    async play(){//TODO: Chua hoat dong dung voi Nomad Camp
+        let removed = await getPlayField().removeCardById(this.id);
+        if(!removed) return;
+        await trash_card(this, false);
+        
+        await new Promise((resolve) => {
             markSupplyPile(
                 function(pile){
                     return pile.getQuantity() > 0 &&  this.cost.isGreaterThan(pile.getCost());
                 }.bind(this),
                 async function(pile){
                     removeMarkSupplyPile();
-                    await getPlayField().remove(this);
-                    await trash_card(this, false);
-                    let new_card = await gain_card(pile, false);
-                    if(new_card != undefined && (new_card.type.includes('Action') || new_card.type.includes('Treasure'))){
-                        await(play_card(new_card, true));
+                    let new_card = await gain_card(pile);
+                    if(new_card 
+                        && (new_card.type.includes(Card.Type.ACTION) || new_card.type.includes(Card.Type.TREASURE))
+                        && getDiscard().getCardById(new_card.id)
+                    ){
+                        await this.play_step1(new_card);
                     }
                     resolve('SpellScroll finish');
                 }.bind(this));
         });
     } 
+    play_step1(card){
+        return new Promise((resolve) =>{
+            let clearFunc = function(){
+                getButtonPanel().clear_buttons();
+                setInstruction('');
+            }
+            getButtonPanel().clear_buttons();
+            setInstruction(`You may play ${card.name}`);
+
+            getButtonPanel().add_button(`Play ${card.name}`, async function(){
+                clearFunc();
+                let removed = await getDiscard().removeCardById(card.id);
+                if(removed) await play_card(card);
+                resolve();
+            });
+
+            getButtonPanel().add_button("Decline", function(){
+                clearFunc();
+                resolve();
+            });
+        })
+    }
 }
 class Staff extends Card{
     constructor(player){
@@ -476,12 +538,35 @@ class Staff extends Card{
             let clearFunc = function(){
                 getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
+
+                getSupportHand().clear();
+                getSupportHand().hide();
+                getDeck().removeCanSelect();
             }
             getButtonPanel().clear_buttons();
-            getButtonPanel().add_button("Don't play", async function(){
+            setInstruction('Staff: You may play an Action from your hand');
+
+            getButtonPanel().add_button("Decline", async function(){
                 clearFunc();
                 resolve('Staff finish');
-            }.bind(this));
+            });
+
+
+            let mayPlayAction = mayPlayCardFromHand(
+                card => card.type.includes(Card.Type.ACTION), 
+                async function(card){
+                    clearFunc();
+                    await play_card(card);
+                    resolve('Staff finish');
+                }
+            );
+            if(!mayPlayAction){
+                clearFunc();
+                resolve();
+            }
+
+            /*
             let is_marked = getHand().mark_cards(
                 card => card.type.includes('Action'), 
                 async function(card){
@@ -489,11 +574,12 @@ class Staff extends Card{
                     await getHand().remove(card);
                     await play_card(card, true);
                     resolve('Staff finish');
-                }.bind(this));
+                });
             if(!is_marked){
                 clearFunc();
                 resolve();
             }
+                */
         });
     } 
 }
@@ -512,34 +598,36 @@ class Sword extends Card{
     is_attacked(){
         if(getHand().length() <= 4){return;}
         return new Promise((resolve) => {
-            this.chosen = 0;
+            let chosen = 0;
+            let cardList = [];
             let n = Math.max(getHand().length() - 4, 0);
-            getHand().getCardAll().forEach(c => c.sword=undefined);
             let clearFunc = function(){
                 getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('Discard down tot 4 cards in hand');
+
             getButtonPanel().add_button("OK", async function(){
                 clearFunc();
-                if(this.chosen < n) return;
-                for(let i=0; i<getHand().length(); i++){
-                    let card = getHand().getCardAll()[i];
-                    if(card.sword){
-                        await discard_card(card);
-                    }      
+                if(chosen < n) return;
+                for(let card of cardList){
+                    await discard_card(card);
                 }
                 resolve('Sword finish');
-            }.bind(this));
+            });
+
             getHand().mark_cards(
-                function(card){return this.chosen < n;}.bind(this),
+                function(card){return chosen < n;},
                 function(card){
-                    clearFunc();
-                    if(this.chosen < n){
-                        this.chosen += 1;
+                    if(chosen < n){
+                        chosen += 1;
+                        cardList.push(card);
                         card.sword = true;
                     }
-                }.bind(this), 'discard');
+                },
+                'discard');
             
         });
     }

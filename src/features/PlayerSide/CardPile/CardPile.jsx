@@ -5,19 +5,22 @@ import './CardPile.css';
 import { RootCard } from '../../../expansions/cards.js';
 import { showCardList, cancelShowCardList } from '../../../Components/display_helper/DeckDisplay.jsx';
 
-const ignoreActivateCondition = true;
+
 let discard = null,
     deck = null,
     trash = null;
 
 class CardPile extends React.Component{
-    constructor(props){
+    constructor(props, id='', src=''){
         super(props);
+        this.id = id;
         this.state = {
-            id: '',
-            src: '',
+            id: id,
+            src: src,
             cards: [],
+            canBeSelected: false,
         };
+        this.onClickFunction = null;// function(){console.log('hallo')};
     }
     addCard(card){
         if(!(card instanceof RootCard)){
@@ -37,8 +40,8 @@ class CardPile extends React.Component{
             this.add_card_list(card);
         }
         else{
-            if(card==undefined || card.name==undefined || card.type==undefined || card.id==undefined){
-                console.log(card)
+            if(!card|| !card.name|| !card.type|| card.id == undefined){
+                console.warn(card)
                 throw new Error('INVALID Card');
             }
             if(!this.hasCardId(card.id)){
@@ -104,12 +107,12 @@ class CardPile extends React.Component{
         return undefined;
     }
     remove(card){
-        if(card == undefined || card.id == undefined) return undefined;
+        if(!card || card.id == undefined) return undefined;
         let card_list = this.state.cards;
         let index = card_list.indexOf(card);
-        if (index == -1) {
+        if (index === -1) {
             index = card_list.map(c => c.id).indexOf(card.id);
-            if(index == -1){
+            if(index === -1){
                 return undefined;
             } else{
                 card_list.splice(index, 1);
@@ -146,7 +149,7 @@ class CardPile extends React.Component{
     }
     hasCardId(id){
         for(let card of this.state.cards){
-            if(card.id == id){
+            if(card.id === id){
                 return true;
             }
         }
@@ -154,41 +157,70 @@ class CardPile extends React.Component{
     }
     getCardById(id){
         for(let card of this.state.cards){
-            if(card.id == id){
+            if(card.id === id){
                 return card;
             }
         }
         return undefined;
     }
-    removeCardById(id){
+    async removeCardById(id){
         let card = this.getCardById(id);
-        if(card != undefined){
-            this.remove(card);
+        let removed = undefined;
+        if(card){
+            removed = await this.remove(card);
         }
-        return card;
+        return removed;
     }
+    setCanSelect(callback, canSelect=true){
+        this.onClickFunction = callback;
+        this.setState({
+            canBeSelected: canSelect,
+        });
+    }
+    removeCanSelect(){
+        this.onClickFunction = null;
+        this.setState({
+            canBeSelected: false,
+        })
+    }
+    onClickEvent(e){
+        let callback = this.onClickFunction;
+        this.removeCanSelect();
+        if(callback){
+            callback();
+        }
+    }
+
     render(){
         return <Tooltip title={this.state.id.toUpperCase()} followCursor leaveDelay={200}>
                     <div id={this.state.id} 
-                            style={{backgroundImage: `url(${this.state.src})`}}
+                            style={{
+                                backgroundImage: `url(${this.state.src})`,
+                                ...(this.state.canBeSelected && {
+                                    //boxShadow: "inset 0px 0px 5vh 0.1vh cyan, 0px 0px 5vh 0.1vh cyan",
+                                    animation: 'canBeSelected 1s infinite',
+                                }),
+                            }}
+                            onClick={e => this.onClickEvent(e)}
                             onMouseEnter={()=>{showCardList(this.state.cards)}}
                             onMouseLeave={()=>{cancelShowCardList()}}>
                     <div className="cards-count">{this.state.cards.length}</div>
                 </div>
             </Tooltip>
     }
-    createMockObject(){
+    createMockObject(ignoreActivateCondition=true){
         let card_list = [];
         for(let card of this.state.cards){
-            if(!card instanceof RootCard) alert('INVALID Card in CardPile');
+            if(!(card instanceof RootCard)) alert('INVALID Card in CardPile');
             card_list.push(card.createMockObject(ignoreActivateCondition));
         }
         return {type: this.state.id,
             name: this.constructor.name,
             cards: card_list};
     }
-    async parseDataFromMockObject(mockObj, player){
-        if(mockObj == undefined || mockObj.cards == undefined || mockObj.type == undefined){
+    //async parseDataFromMockObject(mockObj, player, ignoreActivateCondition=true){
+    async parseDataFromMockObject(mockObj, ignoreActivateCondition=true){
+        if(!mockObj || !mockObj.cards || !mockObj.type){
             throw new Error('INVALID Mock Card Pile');
         }
         let card_list = [];
@@ -204,12 +236,7 @@ class CardPile extends React.Component{
 }
 class Discard extends CardPile{
     constructor(props){
-        super(props);
-        this.state = {
-            id: 'discard',
-            src: '',
-            cards: [],
-        }
+        super(props, 'discard');
         discard = this;
     }
     static getDerivedStateFromProps(props, state) {
@@ -223,12 +250,14 @@ class Discard extends CardPile{
 }
 class Deck extends CardPile{
     constructor(props){
-        super(props);
+        super(props, 'deck', './img/Basic/Back.JPG');
+        /*
         this.state = {
             id: 'deck',
             src: './img/Basic/Back.JPG',
             cards: [],
         }
+            */
         deck = this;
     }
     static getDerivedStateFromProps(props, state) {
@@ -239,8 +268,8 @@ class Deck extends CardPile{
             cards: state.cards,
         };
     }
-    topDeck(card){
-        this.addCard(card);
+    async topDeck(card){
+        await this.addCard(card);
     }
     bottomDeck(card){
         if(!(card instanceof RootCard)){
@@ -256,8 +285,9 @@ class Deck extends CardPile{
         })
     }
     shuffleDeck(){ //use for Famine, Annex, Donate
+        throw new Error('Khong dung shuffle deck nua');
         let cardList = this.state.cards;
-        if(cardList.length == 0) return;
+        if(cardList.length === 0) return;
         for (let i = cardList.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [cardList[i], cardList[j]] = [cardList[j], cardList[i]];
@@ -272,12 +302,14 @@ class Deck extends CardPile{
 }
 class Trash extends CardPile{
     constructor(props){
-        super(props);
+        super(props, 'trash', './img/Basic/Trash.png');
+        /*
         this.state = {
             id: 'trash',
             src: './img/Basic/Trash.png',
             cards: [],
         }
+            */
         trash = this;
     }
 }

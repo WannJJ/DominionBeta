@@ -9,7 +9,7 @@ var playArea = null,
 
 class SideArea extends CardPile{
     constructor(props, name=''){
-        super(props);
+        super(props, name);
         this.name = name;
     }
     render(){
@@ -30,6 +30,12 @@ class PlayArea extends SideArea{
     constructor(props){
         super(props, 'PlayArea');
         playArea = this;
+    }
+    createMockObject(){
+        return super.createMockObject(false);
+    }
+    async parseDataFromMockObject(mockObj){
+        await super.parseDataFromMockObject(mockObj, false);
     }
 }
 class SetAside extends SideArea{

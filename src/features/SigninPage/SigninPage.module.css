@@ -1,0 +1,86 @@
+.signin_layout {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+
+  font-family: Helvetica, Arial, sans-serif;
+
+  background: peachpuff;
+  background-image: url("../../material/base.webp");
+  background-size: cover;
+  
+}
+.signin-layout,
+.input,
+.button,
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  flex-direction: column;
+}
+.title {
+  /*background-color:orangered;*/
+  width: 100%;
+  height: 100px;
+  margin-bottom: 50px;
+}
+.title h1 {
+  text-align: center;
+}
+.container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  left: 50%;
+
+  background: linear-gradient(to top, rgb(177, 177, 177), rgb(99, 98, 98));
+  box-shadow: 0px 0px 10px 1px black;
+  border-radius: 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 3px solid white;
+}
+
+.input {
+  width: 100%;
+  height: 50%;
+  font-size: large;
+}
+.input input {
+  width: 50%;
+  height: 100%;
+  margin: 15px;
+  padding-bottom: 10px;
+
+  font-size: large;
+}
+.button {
+  width: 30%;
+  height: 15%;
+  margin: 10px;
+  border-radius: 5px;
+  background: red;
+}
+.button input {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, rgb(146, 0, 0), rgb(255, 0, 0));
+  color: white;
+  font-size: medium;
+}
+.button button {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, rgb(146, 0, 0), rgb(255, 0, 0));
+  color: white;
+  font-size: medium;
+  border-radius: 5px;
+}
+
+.signin_form {
+  width: 50%;
+  height: 50%;
+  margin-bottom: 50px;
+}

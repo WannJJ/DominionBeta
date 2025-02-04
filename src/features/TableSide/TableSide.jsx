@@ -4,14 +4,7 @@ import { BasicSupply, KingdomSupply } from './Supply.jsx';
 import {NonSupplyPile} from './NonSupplyPile.jsx';
 import { NocturneEffectPile } from './NocturneEffect/NocturneEffectPile.jsx';
 import { LandscapeEffect } from './LandscapeEffect/LandscapeEffect.jsx';
-import { getLandscapeEffectManager, LandscapeEffectManager } from './LandscapeEffect/LandscapeEffectManager.js';
-
-import {Copper, Silver, Gold, Platinum, Curse, Estate, Duchy, Province, Colony} from '../../expansions/basic_card.js';
-
-import { Delay, Desperation, Gamble, Pursue, Ride, Toil, Enhance, March, Transport, 
-    Banish, Bargain, Invest, Seize_the_Day, Commerce, Demand, Stampede, Reap, Enclave,
-    Alliance, Populate } from '../../expansions/menagerie/menagerie_event.js';
-
+import { landscapeEffectManager } from './LandscapeEffect/LandscapeEffectManager.js';
 
 let table = null;
 
@@ -25,7 +18,6 @@ class TableSide extends React.Component{
             nonSupplyList: [],
             hexBoonPileList: [],
         }
-        this.landscapeEffectManager = new LandscapeEffectManager();
         this.landscapeEffectComponentList  = [];
         this.nonSupplyPileList = [];
 
@@ -39,15 +31,19 @@ class TableSide extends React.Component{
         });
         
     }
+    addNonSupplyPile(nonSupplyPileObj){
+        return new Promise((resolve) =>{
+            this.setState(prevState =>({
+                nonSupplyList: [...this.state.nonSupplyList, nonSupplyPileObj],
+            }), resolve);
+        });
+    }
     setHexBoonPileList(hexBoonPileList){
         return new Promise((resolve) =>{
             this.setState(prevstate =>({
                 hexBoonPileList: hexBoonPileList,
             }), resolve);
         });
-    }
-    getLandscapeEffectManager(){
-        return this.landscapeEffectManager;
     }
     setLandscapeEffectList(landscape_effects_class_list){
         return new Promise((resolve) =>{
@@ -56,18 +52,18 @@ class TableSide extends React.Component{
             }), ()=>{resolve();});
         });
     }
-    render(){
+    render(){ 
         let landscape_effects_list  = this.state.landscape_effects_class_list.map(
             (effectCard, index) => <LandscapeEffect effectCard={effectCard} 
                                                     key={index} 
                                                     ref={(element)=>{this.landscapeEffectComponentList.push(element);
-                                                                    this.landscapeEffectManager.addCard(element)}}/>
+                                                                    landscapeEffectManager.addComponent(element)}}/>
             );
         let nonSupplyList = this.state.nonSupplyList.map(
             (nonSupply, index) => <NonSupplyPile cardClass={nonSupply.cardClass}
                                                 quantity={nonSupply.quantity}
-                                                cardList={nonSupply.cardList==undefined?[]:nonSupply.cardList}
-                                                name={nonSupply.name==undefined?'':nonSupply.name}
+                                                cardList={nonSupply.cardList?nonSupply.cardList:[]}
+                                                name={nonSupply.name?nonSupply.name:''}
                                                 key={index}
                                                 ref={(element)=>{this.nonSupplyPileList.push(element)}}/>
         );
@@ -97,12 +93,14 @@ class TableSide extends React.Component{
     }
     componentDidMount(){ 
         return;
+        /*
         this.setNonSupplyList([{
             cardClass: null,
             quantity: 20,
             cardList: [new Copper(), new Gold()],
             name: 'haha',
         }]);
+        */
     }
 }
 

@@ -1,18 +1,14 @@
 import {RootCard} from '../cards.js';
-import {REASON_SHUFFLE, REASON_START_TURN, REASON_START_BUY, REASON_END_BUY, REASON_START_CLEANUP, REASON_END_TURN, REASON_END_GAME, 
-    REASON_WHEN_PLAY, REASON_WHEN_GAIN, REASON_WHEN_DISCARD, REASON_WHEN_TRASH,
-    REASON_WHEN_BEING_ATTACKED, REASON_WHEN_ANOTHER_GAIN} from '../../game_logic/ReactionEffectManager.js';
+import {REASON_START_TURN, REASON_START_BUY,} from '../../game_logic/ReactionEffectManager.js';
 
-import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
+import { getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
 
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
-    attack_other,
-    receive_boon} from '../../game_logic/Activity.js';
+import { discard_card, receive_boon} from '../../game_logic/Activity.js';
 import { getPlayer } from '../../player.js';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { stateHolder } from './HexBoonManager.js';
+import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
 
 class State extends RootCard{
     constructor(name){
@@ -38,7 +34,7 @@ class Deluded extends State{
         this.activate_currently = true;
     }
     should_activate(reason, card){
-        return reason == REASON_START_BUY;
+        return reason === REASON_START_BUY;
     }
     activate(){
         getPlayer().can_not_buy_action_this_turn  = true;
@@ -57,7 +53,7 @@ class Envious extends State{
         this.activate_currently = true;
     }
     should_activate(reason, card){
-        return reason == REASON_START_BUY;
+        return reason === REASON_START_BUY;
     }
     activate(){
         getPlayer().attacked_by_envious = true;
@@ -73,28 +69,31 @@ class Lost_in_the_Woods extends State{
         this.description = 'At the start of your turn, you may discard a card to receive a Boon.';
     }
     should_activate(reason){
-        return reason == REASON_START_TURN;
+        return reason === REASON_START_TURN;
     }
     activate(reason){ //TODO
         if(getHand().length() <= 0) return;
         return new Promise((resolve) =>{
             let clearFunc = async function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
                 await getHand().remove_mark();
             }
             getButtonPanel().clear_buttons();
-            getButtonPanel().add_button('Cancel', async function(){
+            setInstruction('You may discard a card to receive a Boon');
+
+            getButtonPanel().add_button('Decline', async function(){
                 await clearFunc();
                 resolve();
             });
-            let is_marked = getHand().mark_cards(
+            getHand().mark_cards(
                 c => true,
                 async function(card){
                     await clearFunc();
                     await discard_card(card);
                     await receive_boon();
                     resolve()
-                }.bind(this),
+                },
                 'discard',
             );
         });
@@ -141,7 +140,7 @@ class StateList{
     }
     remove(card){
         let index = this.cards.indexOf(card);
-        if (index != -1) {
+        if (index !== -1) {
             this.cards.splice(index, 1);
         }
         else{return false;}
@@ -167,11 +166,5 @@ class StateList{
     }
     render(){}
 }
-let state_list = [new Deluded(), new Envious(), new Lost_in_the_Woods(),  
-        new Miserable(), new TwiceMiserable()];
-
-
-    
-
 
 export{Deluded, Envious, Lost_in_the_Woods, Miserable, TwiceMiserable, StateList};

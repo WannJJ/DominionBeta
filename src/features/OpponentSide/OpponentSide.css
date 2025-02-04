@@ -1,4 +1,4 @@
-header {
+.header {
     position: absolute;
     background-image: linear-gradient(to top right, #ff512f, #f09819);
     width: 100%;

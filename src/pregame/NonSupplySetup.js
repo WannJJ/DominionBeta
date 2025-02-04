@@ -10,6 +10,8 @@ import { Bat, Vampire, Wish, Leprechaun, SecretCave,
 
 import { getTableSide } from "../features/TableSide/TableSide";
 import { HauntedMirror, MagicLamp } from "../expansions/nocturne/nocturne_heirloom";
+import { getClassFromName } from "../setup";
+
 
 
 
@@ -52,26 +54,7 @@ async function choose_non_supply(playCardList){
         name_list.push('Will_o_Wisp');
     }
 
-
-    //await setNonSupplyList(name_list);
     return name_list;
-    /*
-        let name_list = [];
-        let gain_wish = [Leprechaun, SecretCave];
-        if(gain_wish.find(c => this.kingdom_name.includes(c))) name_list.push('Wish');        
-        let gain_wowisp = [Exorcist];
-        if(gain_wowisp.find(c => this.kingdom_name.includes(c))) name_list.push('Will_o_Wisp');
-        let gain_imp = [DevilsWorkshop, Tormentor, Exorcist];
-        if(gain_imp.find(c => this.kingdom_name.includes(c))) name_list.push('Imp');
-        let gain_ghost = [Exorcist, Cemetery];
-        if(gain_ghost.find(c => this.kingdom_name.includes(c))) name_list.push('Ghost');
-        let gain_hex = [CursedVillage, Leprechaun, Skulk, Tormentor, Vampire, Werewolf];
-        if(gain_hex.find(c => this.kingdom_name.includes(c))) name_list.push('Hex');
-        let gain_boon = [Bard, BlessedVillage, Druid, Fool, Idol, Pixie, SacredGrove, Tracker];
-        if(gain_boon.find(c => this.kingdom_name.includes(c))) name_list.push('Boon');
-
-        return name_list;
-        */
 }
 async function setNonSupplyList(name_list){
     let nonSupplyList = [];
@@ -146,6 +129,37 @@ async function setNonSupplyList(name_list){
         });
     }
 
+    if(name_list.includes('Way_of_the_Mouse')){
+        let chosenName = name_list.find(name => name.startsWith('Way_of_the_Mouse;'));
+        
+        if(chosenName){
+            chosenName = chosenName.split(';')[1];
+            let cardClss = getClassFromName(chosenName);
+            nonSupplyList.push({
+                cardClass: null,
+                quantity: 1,
+                cardList: [new cardClss()],
+                name: "WayMouse_Card",
+            });
+        }   
+    }
+
+    if(name_list.includes('RiverBoat')){
+        let chosenName = name_list.find(name => name.startsWith('RiverBoat;'));
+        if(chosenName){
+            chosenName = chosenName.split(';')[1];
+            let cardClss = getClassFromName(chosenName);
+            nonSupplyList.push({
+                cardClass: null,
+                quantity: 1,
+                cardList: [new cardClss()],
+                name: "RiverBoat_Card",
+            });
+        }   
+    }
+
+
+
     await getTableSide().setNonSupplyList(nonSupplyList);
     
 
@@ -157,4 +171,5 @@ function shuffleArray(array) {
         [array[i], array[j]] = [array[j], array[i]];
     }
 }
-export {choose_non_supply, setNonSupplyList};
+export {//choose_non_supply, 
+    setNonSupplyList};

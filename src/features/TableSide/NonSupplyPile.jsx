@@ -1,6 +1,5 @@
 import React from 'react';
 import {Pile} from './Pile.jsx';
-import { showCard } from '../../Components/display_helper/CardDisplay.jsx';
 
 let nonSupplyPileList = [];
 
@@ -23,7 +22,8 @@ class NonSupplyPile extends Pile{
     render(){
         let topCard = this.getNextCard();
         return <div className='non-supply'
-                    onContextMenu={(e)=>{e.preventDefault(); showCard(topCard)}}>
+                    onContextMenu={(e)=>{e.preventDefault(); this.showCardList(true)}}>
+                    {/*onContextMenu={(e)=>{e.preventDefault(); showCard(topCard)}}>*/}
             {this.state.name}
             <div className='cards-count1'>{this.getQuantity()}</div>
         </div>;
@@ -58,11 +58,13 @@ const nonSupplyManager = {
 }
 
 function registerNonSupplyPile(pile){
-    nonSupplyPileList = nonSupplyPileList.filter(p => p.state.name != pile.state.name);
+    nonSupplyPileList = nonSupplyPileList.filter(p => p.state.name !== pile.state.name);
     nonSupplyPileList.push(pile);
 }
 function findNonSupplyPile(func){
     return nonSupplyPileList.find(func);
 }
 
-export {NonSupplyPile, findNonSupplyPile, nonSupplyManager};
+export {NonSupplyPile, findNonSupplyPile, 
+    nonSupplyManager
+};

@@ -17,7 +17,7 @@ class NumberPicker extends React.Component{
         this.setState(prevState =>({
             minValue: min,
             maxValue: max, 
-            quantity: min,
+            quantity: max,
             onSubmitFunction: callback,
         }))
     }

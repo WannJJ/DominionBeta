@@ -3,19 +3,13 @@ import './PlayerSide.css';
 import { Instruction } from './Instruction.jsx';
 import { ButtonPanel } from './ButtonPanel.jsx';
 import {Discard, Deck, Trash} from './CardPile/CardPile.jsx';
-import { PlayField, Hand, Card } from './CardHolder/CardHolder.jsx';
+import { PlayField, Hand} from './CardHolder/CardHolder.jsx';
 import { BottomLeftCorner } from './BottomLeftCorner/BottomLeftCorner.jsx';
 import { TextInput } from '../../Components/user_input/TextInput.jsx';
 import { NumberPicker } from '../../Components/user_input/NumberPicker.jsx';
 
 import Tooltip from '@mui/material/Tooltip';
-import Fab from '@mui/material/Fab';
-import AddIcon from '@mui/icons-material/Add';
 
-const open = false;
-const toggleDrawer = (newOpen) => () => {
-    open = newOpen;
-  };
 
 let basicStats = null;
 class PlayerSide extends React.Component{
@@ -54,12 +48,14 @@ class BasicStats extends React.Component{
             sun_token: 0,
             stateList: '',
         }
+        this.ignoreAddActionsThisTurn = false; // Use for SnowyVillage
         basicStats = this;
     }
     getAction(){
         return this.state.action;
     }
     setAction(value){
+        if(this.ignoreAddActionsThisTurn && value > this.state.value) return;
         return new Promise((resolve) =>{
                 this.setState(prevState =>({
                     action: value,
@@ -69,6 +65,8 @@ class BasicStats extends React.Component{
         });
     }
     addAction(value){
+        if(this.ignoreAddActionsThisTurn) return;
+
         let newValue = value + this.state.action;
         if(newValue < 0) newValue = 0;
         return new Promise((resolve) =>{
@@ -263,10 +261,13 @@ class BasicStats extends React.Component{
                 
             </div>
             
-            <Tooltip title={this.state.stateList} placement="bottom-end">            
+            <Tooltip title={this.state.stateList} placement="bottom-end">
                 <div id='score-coffer-debt'>
                     <Tooltip title='SCORE' placement="top-end">
-                        <div style={{backgroundImage: 'url(./img/Basic/VP1.png)'}}>{this.state.score}</div>
+                        <div className={`${this.state.score}`.length>=3?"three-digit":""} 
+                            style={{backgroundImage: 'url(./img/Basic/VP1.png)'}}>
+                                {this.state.score}
+                        </div>
                     </Tooltip>
                     {this.state.victory_token > 0 && 
                         <Tooltip title='VICTORY TOKEN' placement="top-end">
@@ -306,24 +307,6 @@ class BasicStats extends React.Component{
         return new Promise(resolve =>{
             this.setState(prevState =>(mockObj), resolve);
         });
-    }
-    update_score(){
-        /* TODO
-        this.score = 0;
-        this.all_cards = [];
-        this.all_cards.push(...getDeck().state.cards);
-        this.all_cards.push(...getDiscard().state.cards);
-        this.all_cards.push(...getHand().state.cards);
-        this.all_cards.push(...getPlayField().state.cards);
-        //this.all_cards.push(...this.exile.cards);
-        //this.all_cards.push(...this.playArea.cards);
-        //this.sideArea.forEach(element => this.all_cards.push(...element.cards));
-        
-        this.all_cards.forEach(c => c.add_score()); 
-        this.landscapeEffectManager.effect_list.forEach(e => e.add_score());
-        this.nocturneEffectHolder.cards.forEach(c => c.add_score());
-        this.score += this.victory_token;
-        */
     }
 
 }

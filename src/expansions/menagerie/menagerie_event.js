@@ -1,21 +1,22 @@
 import { Event } from '../landscape_effect.js';
-import { Cost } from '../cards.js';
+import { Card, Cost } from '../cards.js';
 import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
+import { getDiscard, getDeck } from '../../features/PlayerSide/CardPile/CardPile.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
-import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
+import { getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
 import { getSupportHand } from '../../features/SupportHand.jsx';
 
 import { getPlayer } from '../../player.js';
 import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
 import { findSupplyPile, findSupplyPileAll } from '../../features/TableSide/SupplyPile.jsx';
-import { findNonSupplyPile } from '../../features/TableSide/NonSupplyPile.jsx';
-import { getTextInput, create_name_input } from '../../Components/user_input/TextInput.jsx';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, exile_card, set_aside_card,
-    attack_other} from '../../game_logic/Activity.js';
+import { create_name_input } from '../../Components/user_input/TextInput.jsx';
+import { drawNCards, mix_discard_to_deck, play_card,
+    gain_card, gain_card_name, discard_card, trash_card, exile_card, set_aside_card,
+    mayPlayCardFromHand,
+    } from '../../game_logic/Activity.js';
 import {REASON_START_TURN, REASON_WHEN_ANOTHER_GAIN} from '../../game_logic/ReactionEffectManager.js';
+import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
 /*
 class  extends Event{
     constructor(player){
@@ -38,7 +39,7 @@ class Delay extends Event{
     is_buyed(){
         if(getHand().length() <= 0) return;
         return new Promise((resolve) => {
-            this.chosen = 0;
+            let chosen = 0;
             this.chosen_id = null;
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
@@ -48,13 +49,13 @@ class Delay extends Event{
             getButtonPanel().add_button('Cancel', function(){
                 clearFunc();
                 resolve('Delay finish');
-            }.bind(this));
+            });
             let is_marked = getHand().mark_cards(
-                function(card){return this.chosen == 0 && this.chosen_id == null && card.type.includes('Action')}.bind(this),
+                function(card){return chosen === 0 && !this.chosen_id && card.type.includes(Card.Type.ACTION)}.bind(this),
                 async function(card){
                     clearFunc();
-                    this.chosen += 1;
-                    if(this.chosen == 1){
+                    chosen += 1;
+                    if(chosen === 1){
                         this.chosen_id = card.id;
                         await getHand().remove(card);
                         await set_aside_card(card)
@@ -74,15 +75,15 @@ class Delay extends Event{
         });
     }
     should_activate(reason, card){
-        return reason == REASON_START_TURN && this.chosen_id != null
-             && this.activate_currently && getPlayer().turn == this.turn + 1
+        return reason === REASON_START_TURN && this.chosen_id
+             && this.activate_currently && getPlayer().turn === this.turn + 1
              && getSetAside().hasCardId(this.chosen_id);;
     }
     async activate(reason, card){
         if(this.chosen_id == null) return;
         if(getSetAside().hasCardId(this.chosen_id)){
             let card = getSetAside().removeCardById(this.chosen_id);
-            if(card != undefined){
+            if(card){
                 await play_card(card, true);
             }
         } 
@@ -95,9 +96,9 @@ class Desperation extends Event{
         super('Desperation', new Cost(0), "Menagerie/Event/", player);
     }
     is_buyed(){
-        if(getPlayer().gameState.cards_buyed_this_turn.filter(c => c.name==this.name).length > 1) return;
-        let curse_pile = findSupplyPile(function(pile){return pile.getQuantity()>0 && pile.getName() == 'Curse'});
-        if(curse_pile == undefined) return;
+        if(getPlayer().gameState.cards_buyed_this_turn.filter(c => c.name===this.name).length > 1) return;
+        let curse_pile = findSupplyPile(function(pile){return pile.getQuantity()>0 && pile.getName() === 'Curse'});
+        if(!curse_pile) return;
         return new Promise((resolve) => {
             getButtonPanel().clear_buttons();
             getButtonPanel().add_button('Gain Curse', async function(){
@@ -106,8 +107,9 @@ class Desperation extends Event{
                 await getBasicStats().addBuy(1);
                 await getBasicStats().addCoin(2);
                 resolve('Desperation finish');
-            }.bind(this));
+            });
             getButtonPanel().add_button('Don\'t gain', function(){
+                getButtonPanel().clear_buttons();
                 resolve('Desperation finish');
             });
         });
@@ -124,7 +126,7 @@ class Gamble extends Event{
         }
         if(getDeck().length() <= 0) return;
         let card = await getDeck().pop();
-        if(card.type.includes("Action") || card.type.includes('Treasure')){
+        if(card.type.includes(Card.Type.ACTION) || card.type.includes(Card.Type.TREASURE)){
             await play_card(card);
         }else{
             await discard_card(card, false);
@@ -148,12 +150,12 @@ class Pursue extends Event{
                 create_name_input(function(value){
                 card_name = value;
                 resolve(value);
-            }.bind(this));
+            });
         });
         let card_list = [];
         for(let i=0; i<n; i++){
             let card = await getDeck().pop();
-            if(card.name == card_name){
+            if(card.name === card_name){
                 card_list.push(card);
             } else{
                 await discard_card(card, false);
@@ -182,25 +184,47 @@ class Toil extends Event{
         return new Promise((resolve) => {
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
                 getHand().remove_mark();
+
+                getSupportHand().clear();
+                getSupportHand().hide();
+                getDeck().removeCanSelect();
             }
+            setInstruction('Toil: You may play an Action card from your hand.');
+
+            let mayPlayAction = mayPlayCardFromHand(
+                card => card.type.includes(Card.Type.ACTION), 
+                async function(card){
+                    clearFunc();
+                    await play_card(card);
+                    resolve('Toil finish');
+                }
+            );
+            if(!mayPlayAction){
+                clearFunc();
+                resolve();
+            }
+            /*
             let is_marked = getHand().mark_cards(
-                card => card.type.includes('Action'), 
+                card => card.type.includes(Card.Type.ACTION), 
                 async function(card){
                     clearFunc();
                     await getHand().remove(card);
                     await play_card(card, true);
                     resolve('Toil finish');
-                }.bind(this));
+                });
             if(!is_marked){
                 resolve();
                 return;
             }
+                */
+
             getButtonPanel().clear_buttons();
             getButtonPanel().add_button("Don't play", async function(){
                 clearFunc();
                 resolve('Toil finish');
-            }.bind(this));
+            });
         });
     }
 }
@@ -215,18 +239,21 @@ class Enhance extends Event{
             this.trash_card = undefined;
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
                 getHand().remove_mark();
             }
             getButtonPanel().clear_buttons();
-            getButtonPanel().add_button("Cancel", function(){
+            setInstruction('Enhance: You may trash a non-Victory card from your hand.')
+
+            getButtonPanel().add_button("Decline", function(){
                 clearFunc();
                 resolve('Enhance finish');
-            }.bind(this));
+            });
             let is_marked = getHand().mark_cards(
-                function(card){ return this.chosen==0 && !card.type.includes('Victory');}.bind(this), 
+                function(card){ return this.chosen===0 && !card.type.includes(Card.Type.VICTORY);}.bind(this), 
                 async function(card){
                     clearFunc();
-                    if(this.chosen == 0){
+                    if(this.chosen === 0){
                         this.chosen = 1;
                         await trash_card(card);
                     }
@@ -238,11 +265,10 @@ class Enhance extends Event{
                         },
                         async function(pile){
                             removeMarkSupplyPile();
-                            let new_card = await gain_card(pile, false);
-                            await getHand().addCard(new_card);
+                            let new_card = await gain_card(pile);
                             getButtonPanel().clear_buttons();
                             resolve('Enhance finish');
-                        }.bind(this));
+                        });
                     if(!pile_found){
                         removeMarkSupplyPile();
                         resolve();
@@ -279,9 +305,9 @@ class March extends Event{
                 supportHand.clear();
                 getButtonPanel().clear_buttons();
                 resolve('March finish');
-            }.bind(this));
+            });
             let is_marked = supportHand.mark_cards(
-                card => card.type.includes('Action'),
+                card => card.type.includes(Card.Type.ACTION),
                 async function(card){
                     card.march = true; 
                     supportHand.setCardAll(supportHand.state.cards.filter(card => !card.march));
@@ -290,7 +316,7 @@ class March extends Event{
                     getButtonPanel().clear_buttons();
                     await play_card(card);            
                     resolve('March finish');
-                }.bind(this));   
+                });   
             if(!is_marked){
                 supportHand.setCardAll(supportHand.state.cards.filter(card => !card.march))
                 await getDiscard().addCardList(supportHand.state.cards);
@@ -318,7 +344,7 @@ class Transport extends Event{
                 }.bind(this)
             );
 
-            if(getExile().length() > 0 && getExile().state.cards.find(c => c.type.includes('Action') != undefined)){
+            if(getExile().length() > 0 && getExile().getCardAll().find(c => c.type.includes(Card.Type.ACTION))){
                 getButtonPanel().add_button('Put from Exile', async function(){
                     getButtonPanel().clear_buttons();
                     await this.play_step2();
@@ -335,10 +361,10 @@ class Transport extends Event{
                     removeMarkSupplyPile();
                     let new_card = await pile.popNextCard();
                     new_card.setPlayer(getPlayer());
-                    if(new_card==undefined) alert('error');
+                    if(!new_card) alert('error');
                     await exile_card(new_card);
                     resolve('Transport step 1 finish');
-                }.bind(this)
+                }
             );
         });        
     }
@@ -351,7 +377,7 @@ class Transport extends Event{
                 await supportHand.addCard(await getExile().pop());
             }
             let contain_action = supportHand.mark_cards(
-                function(card){return card.type.includes('Action');},
+                function(card){return card.type.includes(Card.Type.ACTION);},
                 async function(card){
                     await getExile().remove(card);
                     await getDeck().addCard(card);   
@@ -360,7 +386,7 @@ class Transport extends Event{
 
                     supportHand.clear(); 
                     resolve('Transport step 2 finish');                 
-                }.bind(this)
+                }
             );
             if(!contain_action){
                 resolve('Transport step 2 finish');
@@ -388,12 +414,12 @@ class Banish extends Event{
                 resolve('Banish finish');
             }.bind(this));
             getHand().mark_cards(
-                function(card){return (this.chosen==0 && name=='' ) || name==card.name;}.bind(this),
+                function(card){return (this.chosen===0 && name==='' ) || name===card.name;}.bind(this),
                 function(card){
                     this.chosen += 1;
-                    if(name==''){
+                    if(name===''){
                         name = card.name;
-                    } else if(name != card.name){
+                    } else if(name !== card.name){
                         return;
                     }
                     this.card_list.push(card);               
@@ -415,9 +441,9 @@ class Bargain extends Event{
                 }, 
                 async function(pile){
                     removeMarkSupplyPile();
-                    let new_card = await gain_card(pile);
+                    await gain_card(pile);
                     resolve('Bargain finish');
-                }.bind(this)
+                }
             );
             if(!is_marked){
                 removeMarkSupplyPile();
@@ -438,6 +464,7 @@ class Invest extends Event{
         this.description = "Exile an Action card from the Supply. While it's in Exile, when another player gains or Invests in a copy of it, +2 Cards.";
     }
     is_buyed(){
+        //TODO
         return new Promise((resolve) => {
             markSupplyPile(
                 function(pile){
@@ -447,7 +474,7 @@ class Invest extends Event{
                     removeMarkSupplyPile();
                     let new_card = await pile.popNextCard();
                     new_card.setPlayer(getPlayer());
-                    if(new_card==undefined) alert('error');
+                    if(!new_card) alert('error');
                     await exile_card(new_card);
 
                     this.activate_currently = true;
@@ -456,19 +483,16 @@ class Invest extends Event{
                 }.bind(this));
         });        
     }
-    do_passive(){
-        //TODO
-    }
     should_activate(reason, card){
-        if(this.card == null || !this.activate_currently || !getExile().has_card(c => c.name == this.card.name)){
+        if(!this.card || !this.activate_currently || !getExile().has_card(c => c.name === this.card.name)){
             this.card = null;
             this.activate_currently = false;
             return false;
         }
-        return reason == REASON_WHEN_ANOTHER_GAIN && card != undefined && card.name == this.card.name;
+        return reason === REASON_WHEN_ANOTHER_GAIN && card && card.name === this.card.name;
     } 
     async activate(reason, card){
-        if(this.card == null || !this.activate_currently || !getExile().has_card(c => c.name == this.card.name)){
+        if(!this.card || !this.activate_currently || !getExile().has_card(c => c.name === this.card.name)){
             this.card = null;
             this.activate_currently = false;
             return;
@@ -505,9 +529,7 @@ class Demand extends Event{
         super('Demand', new Cost(5), "Menagerie/Event/", player);
     }
     async is_buyed(){
-        let horse_card = await gain_card_name('Horse', false);
-        await getDeck().addCard(horse_card);
-        getButtonPanel().clear_buttons();
+        let horse_card = await gain_card_name('Horse', getDeck());
         return new Promise((resolve) => {
             let is_marked = markSupplyPile(
                 function(pile){
@@ -516,12 +538,12 @@ class Demand extends Event{
                 }, 
                 async function(pile){
                     removeMarkSupplyPile();
-                    let new_card = await gain_card(pile, false);
-                    getDeck().addCard(new_card);
+                    let new_card = await gain_card(pile, getDeck());
                     resolve('Demand finish');
-                }.bind(this)
+                }
             );
             if(!is_marked){
+                removeMarkSupplyPile();
                 resolve('Demand finish');
             }
         });
@@ -534,9 +556,7 @@ class Stampede extends Event{
     async is_buyed(){
         if(getPlayField().length() <= 5){
             for(let i=0; i<5; i++){
-                let horse_card = await gain_card_name('Horse', false);
-                //TODO
-                await getDeck().addCard(horse_card);
+                let horse_card = await gain_card_name('Horse', getDeck());
             }
         }
     }
@@ -552,29 +572,32 @@ class Reap extends Event{
         this.description = 'Gain a Gold. Set it aside. If you do, at the start of your next turn, play it.';
     }
     async is_buyed(){
-        let gold = await gain_card_name('Gold', false);
-        if(gold != undefined){
-            this.turn = getPlayer().turn;
-            this.activate_currently = true;
-            this.chosen_id = gold.id;
-            await set_aside_card(gold)
+        let gold = await gain_card_name('Gold');
+        if(gold && getDiscard().getCardById(gold.id)){
+            let removed = getDiscard().removeCardById(gold.id);
+            if(removed){
+                this.turn = getPlayer().turn;
+                this.activate_currently = true;
+                this.chosen_id = gold.id;
+                await set_aside_card(gold)
+            }
         }
     }
-    should_activate(reason, card){ //
-        if(this.chosen_id == null || this.turn + 1 < getPlayer().turn){
+    should_activate(reason, card){ 
+        if(!this.chosen_id || this.turn + 1 < getPlayer().turn){
             this.activate_currently = false;
             return false;
         }
-        return reason == REASON_START_TURN && getSetAside().hasCardId(this.chosen_id) && this.turn + 1 == getPlayer().turn;
+        return reason === REASON_START_TURN && getSetAside().hasCardId(this.chosen_id) && this.turn + 1 === getPlayer().turn;
     }
     async activate(reason, card){
-        if(this.chosen_id == null) return;
+        if(!this.chosen_id) return;
         this.activate_currently = false;
         if(this.turn + 1 < getPlayer().turn && !getSetAside().hasCardId(this.chosen_id)){
             return false;
         }
-        let card_ = getSetAside().removeCardById(this.chosen_id);
-            if(card_ != undefined){
+        let card_ = await getSetAside().removeCardById(this.chosen_id);
+            if(card_){
                 await play_card(card_, true);
             }
 
@@ -587,11 +610,11 @@ class Enclave extends Event{
     }
     async is_buyed(){
         await gain_card_name('Gold');
-        let duchy_pile = findSupplyPile(function(pile){return pile.getName() == 'Duchy' && pile.getQuantity() > 0});
-        if(duchy_pile == undefined) return;  
+        let duchy_pile = findSupplyPile(function(pile){return pile.getName() === 'Duchy' && pile.getQuantity() > 0});
+        if(!duchy_pile) return;  
         let new_duchy = await duchy_pile.popNextCard();
         new_duchy.setPlayer(getPlayer());
-        if(new_duchy ==undefined){
+        if(!new_duchy){
             return;
         }
         await exile_card(new_duchy);
@@ -617,7 +640,7 @@ class Populate extends Event{
         
     }
     async is_buyed(){
-        let action_pile_list = findSupplyPileAll(pile => pile.getType().includes('Action'));
+        let action_pile_list = findSupplyPileAll(pile => pile.getQuantity() > 0 &&  pile.getType().includes(Card.Type.ACTION));
         for(let i=0; i<action_pile_list.length; i++){
             let pile = action_pile_list[i];
             await gain_card(pile);

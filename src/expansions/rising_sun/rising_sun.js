@@ -1,7 +1,5 @@
 import {Card, Cost} from '../cards.js';
 import {REASON_START_TURN, 
-    REASON_WHEN_GAIN, 
-    REASON_WHEN_BEING_ATTACKED, REASON_WHEN_ANOTHER_GAIN,
     REASON_START_CLEANUP,
     REASON_WHEN_PLAY} from '../../game_logic/ReactionEffectManager.js';
 
@@ -13,14 +11,13 @@ import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/Bo
 import { getNativeVillageMat, getIslandMat } from '../../features/PlayerSide/BottomLeftCorner/PlayerMats.jsx';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
-import { getSupportHand } from '../../features/SupportHand.jsx';
-import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
 import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
-    attack_other,
-    reveal_deck} from '../../game_logic/Activity.js';
+    gain_card, gain_card_name, 
+    discard_card, trash_card, reveal_card,
+    attack_other,} from '../../game_logic/Activity.js';
 import { getGameState } from '../../game_logic/GameState.js';
 import { findSupplyPile } from '../../features/TableSide/SupplyPile.jsx';
+import { findNonSupplyPile } from '../../features/TableSide/NonSupplyPile.jsx';
 
 /*
 Mẫu
@@ -174,23 +171,21 @@ class Daimyo extends Card{
     constructor(){
         super("Daimyo", new Cost(0, 6), `${Card.Type.ACTION} ${Card.Type.COMMAND}`, "RisingSun/");
         this.activate_when_in_play = true;
-        this.activate_when_play = true;
+        this.activate_when_play = false;
     }
     async play(){
+        this.activate_when_play = true;
         await draw1();
         await getBasicStats().addAction(1);
     } 
     should_activate(reason, card){
-        return reason === REASON_WHEN_PLAY && this.turn !== getPlayer().turn
-            && card !== undefined && card.type !== undefined
-            && !card.type.includes(Card.Type.COMMAND);
+        return reason === REASON_WHEN_PLAY 
+            && card && card.type
+            && !card.type.includes(Card.Type.COMMAND) && card.type.includes(Card.Type.ACTION);
     }
     async activate(reason, card){
-        let card1 = await getPlayField().remove(card);
-        if(card1 !== undefined){
-            this.turn = getPlayer().turn;
-            await play_card(card1);
-        }
+        this.activate_when_play = false;
+        await play_card(card, false);
     }
 }
 
@@ -500,16 +495,32 @@ class RiverShrine extends Card{
 class RiverBoat extends Card{
     constructor(){
         super("RiverBoat", new Cost(3), `${Card.Type.ACTION} ${Card.Type.DURATION}`, "RisingSun/");
-        this.not_discard_in_cleanup = true;
-        this.activate_when_start_turn = true;
+        this.not_discard_in_cleanup = false;
+        this.activate_when_start_turn = false;
         this.activate_when_in_play = true;
     }
-    setup(){
-        //TODO
+    async setup(){
+        //TODO: Test
+
     }
     async play(){
-
+        this.not_discard_in_cleanup = true;
+        this.activate_when_start_turn = true;
     } 
+    should_activate(reason){
+        return reason === REASON_START_TURN;
+    }
+    async activate(reason){
+        this.not_discard_in_cleanup = false;
+        this.activate_when_start_turn = false;
+        let riverBoatPile = findNonSupplyPile(pile => pile.getName() === "RiverBoat_Card" && pile.getQuantity() > 0);
+        if(riverBoatPile){
+            let card = riverBoatPile.getNextCard();
+            if(card){
+                await play_card(card, false);
+            }
+        }
+    }
 }
 
 class Ronin extends Card{

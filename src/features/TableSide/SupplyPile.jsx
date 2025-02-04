@@ -1,15 +1,28 @@
 import React from 'react';
 import {Pile} from './Pile.jsx';
 import { showCard } from '../../Components/display_helper/CardDisplay.jsx';
+import { cancelShowCardList, showCardList } from '../../Components/display_helper/DeckDisplay.jsx';
 
 let supplyPileList = [];
 const ignoreActivateCondition = true;
+const splitPile = ["Encampment", "Catapult", "Gladiator", "Patrician", "Settlers",
+                "HumbleCastle",
+];
 
 class SupplyPile extends Pile{
     constructor(props){
         let cardClass = props.cardClass,
             quantity = props.quantity;
-        super(props, cardClass, quantity);
+        let card = new cardClass();
+        if(splitPile.includes(card.name)){
+            let cardList = card.createSplitPile();
+            super(props, null, cardList.length, cardList, card.name);
+            //this.isSplitPile = true;
+        } else{
+            super(props, cardClass, quantity);
+            //this.isSplitPile = false;
+        }
+        
         this.state = {
             name: this.state.name,
             card_list: this.state.card_list,
@@ -53,9 +66,27 @@ class SupplyPile extends Pile{
             canSelect: !prevState.canSelect,
         }));
     }
+    onContextMenuEvent(e){
+        e.preventDefault();
+        this.showCardList();
+        /*
+        let topCard = this.getNextCard();
+        if(!topCard) topCard = new this.props.cardClass();
+        if(this.isSplitPile){
+            showCardList(this.state.card_list);
+            window.onclick = function(){
+                cancelShowCardList();
+                window.onclick = null;
+            }
+        } else{
+            showCard(topCard);
+        }
+            */
+        
+    }
     render(){
         let topCard = this.getNextCard();
-        if(topCard == undefined) topCard = new this.props.cardClass();
+        if(!topCard) topCard = new this.props.cardClass();
         let src = topCard.src,
             quantity = this.getQuantity();
         
@@ -70,18 +101,19 @@ class SupplyPile extends Pile{
             }
         }
         let canSelectClass = (canSelect && quantity>0)?' canSelect':'';
+
         return <div className={'pile'+' '+canSelectClass} 
                     style={{backgroundImage: `url(${src})`}}
                     onClick={onClickFunction}
-                    onContextMenu={(e)=>{e.preventDefault();showCard(topCard)}}
+                    onContextMenu={(e)=>{this.onContextMenuEvent(e)}}
                 >
                     {this.state.victory_token > 0 
                         && <div className='victory-token'>{this.state.victory_token}</div>}
                     {this.state.debt_token > 0 
                         && <div className='debt-token'>{this.state.debt_token}</div>}
-                    {quantity == 0 
+                    {quantity === 0 
                         && <div className='empty' />}
-                    <Cost value={topCard.cost.coin}/>
+                    <Cost coin={topCard.cost.coin} debt={topCard.cost.debt} potion={topCard.cost.potion}/>
                     <Quantity value={quantity}/>
         </div>
     }
@@ -105,24 +137,28 @@ class SupplyPile extends Pile{
     }
 }
 class Cost extends React.Component{
-    constructor(props){
-        super(props);
-    }
     render(){
-        return <div className='cost'>{this.props.value}</div>
+        const coin = this.props.coin,
+            debt = this.props.debt,
+            potion = this.props.potion;
+        return <div className='cost'>
+            {(coin !== 0 || (debt === 0 && potion === 0))
+            && <div className='cost-coin'>{coin}</div>}
+            {debt !== 0
+            && <div className='cost-debt'>{debt}</div>}
+            {potion!== 0
+            && <div className='cost-potion'>{potion}</div>}
+        </div>
     }
 }
 class Quantity extends React.Component{
-    constructor(props){
-        super(props);
-    }
     render(){
         return <div className='amount' key={this.props.value}>{this.props.value}</div>
     }
 }
 
 function addSupplyPile(pile){
-    supplyPileList = supplyPileList.filter(p => p.state.name != pile.state.name);
+    supplyPileList = supplyPileList.filter(p => p.state.name !== pile.state.name);
     supplyPileList.push(pile);
 }
 function findSupplyPile(func){

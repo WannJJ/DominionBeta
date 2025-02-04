@@ -65,12 +65,14 @@
   left: 0%;
   bottom: 0%;
   height: 3vh;
+
+  /*
   aspect-ratio: 1 / 1;
   background-color: rgb(220, 180, 18);
   border-radius: 100%;
   text-align: center;
   padding: auto;
-  /*text-shadow: 1px 1px 2px black, 0 0 25px blue, 0 0 5px darkblue;*/
+  
   color: black;
   text-shadow: 1px 1px 2px black;
   font-size: 2vh;
@@ -78,6 +80,48 @@
   font-weight: 900;
   line-height: 140%;
   font-style: normal;
+  
+
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-image: url("./img/Coin.png");
+  */
+  /*text-shadow: 1px 1px 2px black, 0 0 25px blue, 0 0 5px darkblue;*/
+}
+.cost-coin,
+.cost-debt,
+.cost-potion {
+  position: relative;
+  left: 0%;
+  bottom: 0%;
+  float: left;
+
+  height: 3vh;
+  aspect-ratio: 1 / 1;
+  /*background-color: rgb(220, 180, 18);*/
+  border-radius: 100%;
+  text-align: center;
+  padding: auto;
+
+  color: black;
+  text-shadow: 1px 1px 2px black;
+  font-size: 2vh;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: 900;
+  line-height: 140%;
+  font-style: normal;
+
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+.cost-coin {
+  background-image: url("./img/Coin.png");
+}
+.cost-debt {
+  background-image: url("./img/Debt.png");
+}
+.cost-potion {
+  background-image: url("./img/Potion.png");
 }
 .amount {
   position: absolute;
@@ -98,7 +142,7 @@
   font-style: normal;
 
   transition: transform 0.3s ease, opacity 0.3s ease;
-  animation: fadeInUp 0.5s; 
+  animation: fadeInUp 0.5s;
 }
 
 @keyframes fadeInUp {
@@ -111,7 +155,6 @@
     opacity: 1;
   }
 }
-
 
 #setup-main {
   float: left;
@@ -286,6 +329,8 @@
   margin-bottom: 2%;
   margin-left: 0.5%;
 
+  color: white;
+  font-size: 1.3vh;
   border-radius: 5%;
   background-color: azure;
   background-size: 100%;

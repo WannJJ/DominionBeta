@@ -76,16 +76,22 @@ class LandscapeEffect extends React.Component{
     }
     render(){
         let canSelectClassName = this.state.canSelect?' canSelect':'';
+        let landscapeCard = this.props.effectCard;
+        
         return <div 
                 className={'event'+canSelectClassName} 
-                style={{backgroundImage: `url(${this.props.effectCard.src})`}}
+                style={{backgroundImage: `url(${landscapeCard.src})`}}
                 onClick={this.onClickFunction.bind(this)}
-                onContextMenu={(e)=>{e.preventDefault(); showCard(this.props.effectCard)}}
+                onContextMenu={(e)=>{e.preventDefault(); showCard(landscapeCard)}}
             >
                 {this.state.victory_token > 0 
                         && <div className='victory-token'>{this.state.victory_token}</div>}
                 {this.state.debt_token > 0 
                         && <div className='debt-token'>{this.state.debt_token}</div>}
+                {landscapeCard.chosen_pile_name 
+                    && <div>{landscapeCard.chosen_pile_name}</div>
+                }
+
             </div>
 
     }
@@ -100,8 +106,9 @@ class LandscapeEffect extends React.Component{
     parseDataFromMockObject(mockObj){
     }
     parseDataFromMockObjectGeneral(mockObj){ 
-        if(mockObj == undefined || mockObj.name == undefined || mockObj.name != this.getName() 
-            || mockObj.effectCard == undefined || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
+        if(!mockObj|| !mockObj.name|| mockObj.name !== this.getName() 
+            || !mockObj.effectCard || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
+            console.error(mockObj);
             throw new Error('INVALID Mock Landscape Effect');
         }
         this.props.effectCard.parseDataFromMockObjectGeneral(mockObj.effectCard);
@@ -114,8 +121,8 @@ class LandscapeEffect extends React.Component{
         });
     }
     parseDataFromMockObjectOwn(mockObj){
-        if(mockObj == undefined || mockObj.name == undefined || mockObj.name != this.getName()
-            || mockObj.effectCard == undefined || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
+        if(!mockObj || !mockObj.name || mockObj.name !== this.getName()
+            || !mockObj.effectCard || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
             throw new Error('INVALID Mock Landscape Effect');
         }
         this.props.effectCard.parseDataFromMockObjectOwn(mockObj.effectCard);
@@ -133,9 +140,7 @@ class LandscapeEffect extends React.Component{
 function addLandscapeEffect(card){
     cardList.push(card);
 }
-function getLandscapeEffectAll(){
-    return cardList;
-}
+
 function findLandscapeEffect(callback){
     return cardList.find(callback);
 }
@@ -148,8 +153,6 @@ function findLandscapeEffectAll(callback){
     }
     return array;
 }
-function markLandscapeEffectAll(crit_func, func){
-    
-}
+
 
 export{LandscapeEffect, findLandscapeEffect, findLandscapeEffectAll};

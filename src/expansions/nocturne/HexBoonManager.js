@@ -1,5 +1,4 @@
 
-import { Card } from "../cards";
 import { getTableSide} from "../../features/TableSide/TableSide";
 import { getBasicStats } from "../../features/PlayerSide/PlayerSide";
 
@@ -9,6 +8,7 @@ import { TheEarthsGift, TheFieldsGift, TheFlamesGift, TheForestsGift, TheMoonsGi
     TheRiversGift, TheSeasGift, TheSkysGift, TheSunsGift, TheSwampsGift, TheWindsGift,  } from "./nocturne_boon";
 import { BadOmens, Delusion, Envy, Famine, Fear, Greed, Haunting, Locusts, Misery, Plague, Poverty, War } from "./nocturne_hex";
 import { generateCardFromMockObject } from "../../game_logic/GameState";
+import { shuffleArray } from "../../utils/helpers";
 
 
 const BOON = 'Boon', 
@@ -26,6 +26,7 @@ class NocturneEffectPileController{
     }
     registerEffectComponent(component){
         this.component = component;
+        this.changeComponentQuantity();
     }
     getName(){
         return this.name;
@@ -45,7 +46,7 @@ class NocturneEffectPileController{
 
     changeComponentQuantity(){
         let quantity = this.getQuantity();
-        if(this.component !== null) this.component.setQuantity(quantity);
+        if(this.component !== null) this.component.setQuantity(quantity, this.effectList);
     }
     getNextCard(){
         if(this.effectList.length <= 0) this.mixFromDiscard();
@@ -58,8 +59,7 @@ class NocturneEffectPileController{
     }
     mixFromDiscard(){
         if(this.discardList.length > 0){
-            this.discardList.push(...this.effectList);
-            this.effectList = this.discardList;
+            this.effectList.push(...this.discardList);
             shuffleArray(this.effectList);
             this.discardList = [];
 
@@ -79,8 +79,12 @@ class NocturneEffectPileController{
         this.changeComponentQuantity();
         return effectCard;
     }
-    return_card(card){ //Use for Horse, Way of the horse,  The River's Gift, Bat/ Vampire, Scrounge
-        if(card === undefined || card.name === undefined) return false; 
+    return_card(card){ 
+        if(card === undefined || card.name === undefined) {
+            throw new Error("");
+            
+            return false; 
+        }
         this.discardList.push(card);
         if(this.effectList.length <= 0) this.mixFromDiscard();
         this.changeComponentQuantity();
@@ -92,7 +96,7 @@ class NocturneEffectPileController{
         return {
             name: this.name,
             effectList: this.effectList.map(effectCard => effectCard.createMockObject()),
-            discardList: this.effectList.map(effectCard => effectCard.createMockObject()),
+            discardList: this.discardList.map(effectCard => effectCard.createMockObject()),
         };
     }
     parseDataFromMockObject(mockObj){
@@ -101,6 +105,8 @@ class NocturneEffectPileController{
             throw new Error('INVALID Mock Nocturne Pile');
         }
 
+        this.effectList = [];
+        this.discardList = [];
         for(let effectObj of mockObj.effectList){
             let newEffect = generateCardFromMockObject(effectObj)
             this.effectList.push(newEffect);
@@ -120,11 +126,15 @@ class NocturneEffectPileController{
  */
 const boonHolder = {
     boonList: [],
+    boonListBlessedVillage: [],
     getBoonList: function(){
         return this.boonList;
     },
     addBoon: function(boonCard){
         this.boonList.push(boonCard);
+    },
+    addBoonAsBlessedVillage: function(boonCard){
+        this.boonListBlessedVillage.push(boonCard);
     },
     getLength: function(){
         return this.boonList.length;
@@ -135,6 +145,7 @@ const boonHolder = {
     createMockObject: function(){
         return {
             boonList: this.boonList.map(effectCard => effectCard.createMockObject()),
+            boonListBlessedVillage: this.boonListBlessedVillage.map(effectCard => effectCard.createMockObject()),
         };
     },
     parseDataFromMockObject: function(mockObj){
@@ -142,9 +153,16 @@ const boonHolder = {
             console.warn(mockObj);   
             throw new Error('INVALID Mock Nocturne Pile');
         }
+
+        this.boonList = [];
         for(let effectObj of mockObj.boonList){
             let newEffect = generateCardFromMockObject(effectObj)
             this.boonList.push(newEffect);
+        }
+        this.boonListBlessedVillage = [];
+        for(let effectObj of mockObj.boonListBlessedVillage){
+            let newEffect = generateCardFromMockObject(effectObj)
+            this.boonListBlessedVillage.push(newEffect);
         }
     }
 }
@@ -195,6 +213,8 @@ const stateHolder = {
             console.warn(mockObj);   
             throw new Error('INVALID Mock State Holder');
         }
+        
+        this.stateList = [];
         for(let effectObj of mockObj.stateList){
             let newEffect = generateCardFromMockObject(effectObj)
             this.stateList.push(newEffect);
@@ -203,8 +223,6 @@ const stateHolder = {
     }
 };
 
-const boonPileObject = null;
-const hexPileObject = null;
 
 const HexBoonManager = {
     boonPile : null,
@@ -231,6 +249,15 @@ const HexBoonManager = {
     getBoonPile: function(){
         return this.boonPile;
     },
+    popTop3Boons: function(){ // For Druid
+        let n = 3;
+        let top3Boons = [];
+        while(this.boonPile.getQuantity() > 0 && n > 0){
+            top3Boons.push(this.boonPile.popNextCard());
+            n--;
+        }
+        return top3Boons;
+    },
     setBoonPile: function(){
         const boonClassList = [TheFieldsGift, TheFlamesGift, TheRiversGift, TheForestsGift, TheSunsGift, TheSwampsGift, TheWindsGift, TheEarthsGift, TheMountainsGift, TheSeasGift, TheSkysGift, TheMoonsGift, ];
         const boonList = boonClassList.map(effectClass => new effectClass());
@@ -242,7 +269,7 @@ const HexBoonManager = {
         return this.hexPile;
     },
     setHexPile: function(){
-        const hexClassList = [BadOmens, Misery, Delusion, Envy, Famine, Fear, Greed, Haunting, Locusts, Plague, Poverty, War];
+        const hexClassList = [Famine, BadOmens, Misery, Delusion, Envy, Famine, Fear, Greed, Haunting, Locusts, Plague, Poverty, War];
         const hexList = hexClassList.map(effectClass => new effectClass());
         shuffleArray(hexList);
 
@@ -258,19 +285,54 @@ const HexBoonManager = {
         if(this.boonPile === null) return;
         return this.boonPile.getNextCard();
     },
-    receiveBoon: async function(){
+    popNextBoon: function(){
+        if(this.boonPile === null) return;
+        return this.boonPile.popNextCard();
+    },
+    takeBoonAsBlessedVillage: function(){
         if(this.boonPile === null) return;
         let boonEffect = this.boonPile.popNextCard();
-        if(boonEffect !== null){
-            await boonEffect.is_received();
+        this.boonHolder.addBoonAsBlessedVillage(boonEffect);
+        return boonEffect;
+    },
+    receiveBoon: async function(boonEffect, leaveBoonThere=false){
+        /*
+        if(this.boonPile === null) return;
+        let boonEffect = this.boonPile.popNextCard();
+        */
+        if(!boonEffect) return;
+        await boonEffect.is_received();
 
+        if(!leaveBoonThere){
             if(['TheFieldsGift', 'TheForestsGift', 'TheRiversGift'].includes(boonEffect.name)){
                 this.boonHolder.addBoon(boonEffect);
             } else{
                 this.boonPile.return_card(boonEffect);
             }
         }
+        
         return boonEffect;
+    },
+    receiveBoonTwice: async function(boonCard){ // For Pixie
+        if(!boonCard) return;
+        await boonCard.is_received();
+        await boonCard.is_received();
+        if(['TheFieldsGift', 'TheForestsGift', 'TheRiversGift'].includes(boonCard.name)){
+            this.boonHolder.addBoon(boonCard);
+        } else{
+            this.boonPile.return_card(boonCard);
+        }
+        return boonCard;
+    },
+    popBoonAsBlessedVillage: function(boonId){
+        for(let i=0; i<  this.boonHolder.boonListBlessedVillage.length; i++){
+            let boonCard = this.boonHolder.boonListBlessedVillage[i];
+            if(boonCard.id === boonId){
+                this.boonHolder.boonListBlessedVillage.splice(i, 1);
+                return boonCard;
+            }
+        }
+        return;
     },
     getNextHex: function(){
         if(this.hexPile === null) return;
@@ -285,10 +347,10 @@ const HexBoonManager = {
         }
         return hexEffect;
     },
-    returnAllBoon: function(){ 
+    returnAllBoon: function(){ // Use in end turn, getPlayer().end_turn()
         while(this.boonHolder.getLength() > 0){
             let boonCard = this.boonHolder.pop();
-            if(boonCard !== undefined) this.boonPile.return_card(boonCard);
+            if(boonCard) this.boonPile.return_card(boonCard);
         }
     },
     createMockObject: function(){
@@ -304,6 +366,7 @@ const HexBoonManager = {
             || mockObj.boonHolder === undefined || mockObj.stateHolder === undefined){
             throw new Error('INVALID Mock HexBoonManager');
         }
+
         if(mockObj.boonPile !== null && this.boonPile !== null){
             this.boonPile.parseDataFromMockObject(mockObj.boonPile);
         }
@@ -327,6 +390,7 @@ const HexBoonManager = {
 };
 
 
+/*
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -334,5 +398,5 @@ function shuffleArray(array) {
     }
 }
 
-
+*/
 export {HexBoonManager, boonHolder, stateHolder};

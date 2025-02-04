@@ -24,7 +24,8 @@ const Result = () => {
     setVisible = setVisibleState;
     setWin = setWinStatus;
   
-    if (!visible) return null; // Ẩn component nếu visible là false
+    //if (!visible) return null; // Ẩn component nếu visible là false
+    if (!visible) return null;
   
     return (
         <>

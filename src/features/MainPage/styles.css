@@ -1,0 +1,113 @@
+
+#body1 {
+  background-color: purple;
+}
+
+#body2 {
+  position: absolute;
+  top: 10%;
+  width: 100%;
+  height: 90%;
+  background-color: red;
+  transition: 0.5s;
+}
+#left-side {
+  position: absolute;
+  left: 0%;
+  width: 85%;
+  height: 100%;
+  background-color: white;
+  
+  padding: 0px;
+  transition: width 0.5s;
+ 
+}
+#left-side::before{
+  content: " ";
+  position: absolute;
+  top: 0; 
+  left: 0;
+  width: 100%; 
+  height: 100%; 
+  opacity: 0.2;
+  z-index: 0;
+
+  background-image: url("../../material/adventures.webp");
+  background-size: cover;
+  background-blend-mode: luminosity;
+}
+#right-side {
+  position: absolute;
+  right: 0%;
+  width: 15%;
+  height: 100%;
+  background-color: aqua;
+  overflow-x: hidden;
+  transition: width 0.5s;
+
+}
+
+
+
+#player-side {
+  position: absolute;
+  bottom: 0%;
+  height: 45%;
+  width: 100%;
+  border: 2px solid yellow;
+  box-sizing: border-box;
+}
+#player-side:hover {
+  outline: 3px solid yellow;
+}
+
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  border: 1px solid yellowgreen;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: yellowgreen;
+  border-radius: 10px;
+}
+  
+#setting-buttons {
+  position: absolute;
+  bottom: 0%;
+  width: 100%;
+  height: 10%;
+  background-color: grey;
+  display: flex;
+}
+#setting-buttons > button {
+  width: 20%;
+  aspect-ratio: 1/1;
+  background-color: rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  border: 2px solid white;
+  border-radius: 5px;
+  align-self: center;
+}
+
+.tooltip .tooltiptext {
+  top: 50%;
+  visibility: hidden;
+  width: 120px;
+  box-sizing: border-box;
+  background-color: black;
+  color: #fff;
+
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px;
+
+  /* Position the tooltip */
+  position: absolute;
+  z-index: 1;
+}
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}

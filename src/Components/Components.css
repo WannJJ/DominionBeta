@@ -38,10 +38,11 @@
   }
   #number-picker-form {
     position: absolute;
-    left: 40%;
-    bottom: 30%;
+    left: 50%;
+    bottom: 50%;
     width: 200px;
     aspect-ratio: 8/7;
+    transform: translateX(-50%);
   
     background-color: rgba(0, 0, 0, 0);
     background-image: url("./img/Debt.png");

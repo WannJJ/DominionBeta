@@ -1,13 +1,11 @@
 
 
-let landscapeEffectManager = null;
-class LandscapeEffectManager{
-    constructor(){
-        this.effect_list = [];
-        landscapeEffectManager = this;
-    }
-    async setup(){
-        for(let landscapeComponent of this.effect_list){
+//let landscapeEffectManager = null;
+
+const landscapeEffectManager = {
+    effectComponentList : [],
+    setup: async function(){
+        for(let landscapeComponent of this.effectComponentList){
             let card = landscapeComponent.getCard();
 
             //TODO: buoc nay lam tao lao, bi trung lap, nhung chua biet xu ly the nao cho dung
@@ -15,95 +13,95 @@ class LandscapeEffectManager{
 
             await card.setup();
         }
-    }
-    addCard(landscapeCard){
-        if(landscapeCard == null) return;
+    },
+    addComponent: function(landscapeCard){
+        if(!landscapeCard) return;
 
-        if(this.effect_list.find(card => card.getName()==landscapeCard.getName())) return;
-        this.effect_list.push(landscapeCard);
-    }
-    has_card(crit_func){
-        if(this.effect_list.length <= 0){return false;}
-        for(let i=0; i<this.effect_list.length; i++){
-            let card = this.effect_list[i];
+        if(this.effectComponentList.find(card => card.getName()===landscapeCard.getName())) return;
+        this.effectComponentList.push(landscapeCard);
+    },
+    has_card: function(crit_func){
+        if(this.effectComponentList.length <= 0){return false;}
+        for(let i=0; i<this.effectComponentList.length; i++){
+            let card = this.effectComponentList[i];
             if(crit_func(card)){return true;}
         }
         return false;
-    }
+    },
     find_card(crit_func){
-        for(let i=0; i<this.effect_list.length; i++){
-            let card = this.effect_list[i];
+        for(let i=0; i<this.effectComponentList.length; i++){
+            let card = this.effectComponentList[i];
             if(crit_func(card)){return card;}
         }
         return undefined;
-    }
-    mark_cards(crit_func, func){
+    },
+    getEffectComponentListAll(){
+        return this.effectComponentList;
+    },
+    mark_cards: function(crit_func, func){
         let card_found = false;
-        for(let i=0; i<this.effect_list.length; i++){
-            let effect_card = this.effect_list[i];
-            if(crit_func(effect_card)){
-                effect_card.markSelf(card => func(card));
+        for(let i=0; i<this.effectComponentList.length; i++){
+            let effectComponent = this.effectComponentList[i];
+            if(crit_func(effectComponent)){
+                effectComponent.markSelf(card => func(card));
                 card_found = true;
             }
-            
         }
         return card_found;
-    }
-    remove_mark(){
-        for(let i=0; i<this.effect_list.length; i++){
-            let effect_card = this.effect_list[i];
+    },
+    remove_mark: function(){
+        for(let i=0; i<this.effectComponentList.length; i++){
+            let effect_card = this.effectComponentList[i];
             effect_card.removeSelfMark();
         }
-    }
+    },
     createMockObject(){
-        let landscape_list = [];
-        for(let landscapeCard of this.effect_list){
-            landscape_list.push(landscapeCard.createMockObject());
+        let landscapeList = [];
+        for(let landscapeCard of this.effectComponentList){
+            landscapeList.push(landscapeCard.createMockObject());
         }
-        return {effect_list: landscape_list};
-    }
-    isValidMockObject(mockObj){
-        if(mockObj == undefined || mockObj.effect_list == undefined || !Array.isArray(mockObj.effect_list)){
+        return {effectComponentList: landscapeList};
+    },
+    isValidMockObject: function(mockObj){
+        if(!mockObj|| !mockObj.effectComponentList|| !Array.isArray(mockObj.effectComponentList)){
             throw new Error('INVALID Mock Object LandscapeEffectManager');
         }
-    }
-    async parseDataFromMockObject(mockObj){
+    },
+    parseDataFromMockObject: async function(mockObj){
         this.isValidMockObject(mockObj);
-        for(let mockCard of mockObj.effect_list){
-            let effect_card = this.find_card(c => c.getName() == mockCard.name);
-            if(effect_card != undefined){
-                await effect_card.parseDataFromMockObject(mockCard);
+        for(let mockCard of mockObj.effectComponentList){
+            let effectComponent = this.find_card(c => c.getName() === mockCard.name);
+            if(effectComponent){
+                await effectComponent.parseDataFromMockObject(mockCard);
             } else{
                 throw new Error('ERROR landscape card not found');
             }
         }
-    }
-    async parseDataFromMockObjectGeneral(mockObj){
+    },
+    parseDataFromMockObjectGeneral: async function(mockObj){
         this.isValidMockObject(mockObj);
-        for(let mockCard of mockObj.effect_list){
-            let effect_card = this.find_card(c => c.getName() == mockCard.name);
-            if(effect_card != undefined){
-                await effect_card.parseDataFromMockObjectGeneral(mockCard);
+        for(let mockCard of mockObj.effectComponentList){
+            let effectComponent = this.find_card(c => c.getName() === mockCard.name);
+            if(effectComponent){
+                await effectComponent.parseDataFromMockObjectGeneral(mockCard);
             } else{
                 throw new Error('ERROR landscape card not found');
             }
         }
-    }
-    async parseDataFromMockObjectOwn(mockObj){
+    },
+    parseDataFromMockObjectOwn: async function(mockObj){
         this.isValidMockObject(mockObj);
-        for(let mockCard of mockObj.effect_list){
-            let effect_card = this.find_card(c => c.getName() == mockCard.name);
-            if(effect_card != undefined){
-                await effect_card.parseDataFromMockObjectOwn(mockCard);
+        for(let mockCard of mockObj.effectComponentList){
+            let effectComponent = this.find_card(c => c.getName() === mockCard.name);
+            if(effectComponent){
+                await effectComponent.parseDataFromMockObjectOwn(mockCard);
             } else{
                 throw new Error('ERROR landscape card not found');
             }
         }
-    }
+    },
 }
 
-function getLandscapeEffectManager(){
-    return landscapeEffectManager;
-}
 
-export{ LandscapeEffectManager, getLandscapeEffectManager};
+
+export{ landscapeEffectManager};

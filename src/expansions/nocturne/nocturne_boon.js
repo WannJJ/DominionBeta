@@ -1,21 +1,21 @@
-import { RootCard, Cost } from '../cards.js';
-import {REASON_SHUFFLE, REASON_START_TURN, REASON_START_BUY, REASON_END_BUY, REASON_START_CLEANUP, REASON_END_TURN, REASON_END_GAME, 
-    REASON_WHEN_PLAY, REASON_WHEN_GAIN, REASON_WHEN_DISCARD, REASON_WHEN_TRASH,
-    REASON_WHEN_BEING_ATTACKED, REASON_WHEN_ANOTHER_GAIN} from '../../reaction_effect_manager.js';
+import { RootCard, Cost, Card } from '../cards.js';
+import { REASON_START_CLEANUP,  REASON_END_TURN, } from '../../game_logic/ReactionEffectManager.js';
+import { getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
+import { getDeck, getDiscard} from '../../features/PlayerSide/CardPile/CardPile.jsx';
 
-import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
-import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
 import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
 import { getSupportHand } from '../../features/SupportHand.jsx';
 
 import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
-import { getPlayer } from '../../player.js';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
-    attack_other} from '../../game_logic/Activity.js';
-import { findNonSupplyPile } from '../../features/TableSide/NonSupplyPile.jsx';
+
+import { draw1, drawNCards, mix_discard_to_deck,
+    gain_card, gain_card_name,
+    discard_card, trash_card,
+    } from '../../game_logic/Activity.js';
+import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
+import { setNonSupplyList } from '../../pregame/NonSupplySetup.js';
+
 
 
 
@@ -40,15 +40,18 @@ class TheEarthsGift extends Boon{
             this.chosen = 0;
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
                 getHand().remove_mark();
             }
             getButtonPanel().clear_buttons();
+            setInstruction('TheEarthsGift: You may discard a Treasure to gain a card costing up to $4.');
+
             getButtonPanel().add_button("Cancel", async function(){
                 clearFunc();
                 resolve('TheEarhsGift finish');
             }.bind(this));
             let is_marked = getHand().mark_cards(
-                function(card){return card.type.includes('Treasure') && this.chosen==0;}.bind(this),
+                function(card){return card.type.includes(Card.Type.TREASURE) && this.chosen===0;}.bind(this),
                 async function(card){
                     clearFunc();
                     this.chosen += 1;  
@@ -71,11 +74,12 @@ class TheEarthsGift extends Boon{
             let is_marked = markSupplyPile(
                 function(pile){
                     let cost = new Cost(4);
-                    return cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity()>0 && chosen==0;
+                    return cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity()>0 && chosen===0;
                 },
                 async function(pile){
-                    chosen = 1;
-                    let new_card = await gain_card(pile);
+                    chosen += 1;
+                    removeMarkSupplyPile();
+                    await gain_card(pile);
                     resolve('TheEarhsGift step 1 finish');    
                 }.bind(this)
             );
@@ -93,6 +97,7 @@ class TheFieldsGift extends Boon{
     }
     async is_received(){
         this.activate_currently = true;
+        this.activate_when_start_cleanup = false;
 
         await getBasicStats().addAction(1);
         await getBasicStats().addCoin(1);
@@ -114,9 +119,12 @@ class TheFlamesGift extends Boon{
             let clearFunc = async function(){
                 await getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
-            getButtonPanel().add_button("Cancel", async function(){
+            setInstruction('TheFlamesGift: You may trash a card from your hand.');
+
+            getButtonPanel().add_button("Decline", async function(){
                 await clearFunc();
                 resolve('TheFlamesGift finish');
             }.bind(this));
@@ -168,10 +176,13 @@ class TheMoonsGift extends Boon{
 
             let clearFunc = function(){
                 getButtonPanel().clear_buttons();
+                setInstruction('');
                 supportHand.remove_mark();
                 supportHand.clear();
             }
             getButtonPanel().clear_buttons();
+            setInstruction('TheMoonsGift: You may put a card from your discard pile onto deck.');
+
             getButtonPanel().add_button("OK", async function(){
                 await getDiscard().setCardAll(supportHand.getCardAll());
 
@@ -200,7 +211,7 @@ class TheMountainsGift extends Boon{
         super('TheMountainsGift');
     }
     async is_received(){
-        await gain_card_name('Silver', true);
+        await gain_card_name('Silver');
     }
 }
 class TheRiversGift extends Boon{
@@ -239,8 +250,11 @@ class TheSkysGift extends Boon{
             let clearFunc = function(){
                 getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('TheSkysGift: You may discard 3 cards to gain a Gold.');
+
             getButtonPanel().add_button("Confirm Discard", async function(){
                 clearFunc();
                 if(this.chosen == 3){
@@ -294,8 +308,10 @@ class TheSunsGift extends Boon{
             let supportHand = getSupportHand();
             let clearFunc = function(){
                 getButtonPanel().clear_buttons(); 
+                setInstruction('');
                 supportHand.remove_mark();
             }
+            setInstruction('TheSunsGift: Discard any number of cards.');
 
             supportHand.mark_cards(
                 function(){return true;},
@@ -333,8 +349,11 @@ class TheSunsGift extends Boon{
 
         let clearFunc = function(){
             getButtonPanel().clear_buttons();
+            setInstruction('');
             supportHand.remove_mark();
         }
+        setInstruction('TheSunsGift: Put the cards back in any order.');
+
         return new Promise((resolve) => {
             getButtonPanel().clear_buttons();
             getButtonPanel().add_button('OK', async function(){
@@ -369,14 +388,18 @@ class TheWindsGift extends Boon{
     }
     async is_received(){
         await drawNCards(2);
+        if(getHand().getLength() <= 2) return;
         return new Promise((resolve) => {
             this.chosen = 0;
             this.card_list = [];
             let clearFunc = function(){
                 getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
             getButtonPanel().clear_buttons();
+            setInstruction('TheWindsGift: Discard 2 cards');
+
             getButtonPanel().add_button("Confirm Discard", async function(){
                 if(this.chosen < 2) return;
                 clearFunc();

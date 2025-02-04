@@ -27,7 +27,7 @@ class OpponentSide extends React.Component{
     }
     render(){
         let opponentList = this.state.opponentList.map((opponent, index) => <OpponentBoard name={opponent.name} key={index}/>);
-        return <header style={{height: this.props.headerHeight}}>
+        return <header className='header' style={{height: this.props.headerHeight}}>
             {opponentList}
         </header>;
     }
@@ -42,7 +42,7 @@ class OpponentBoard extends React.Component{
             discard: [],//[{src: './img/Base/Sentry.JPG'}],
             deck: [],
             hand: [],
-            score: 10,
+            score: 0,
         };
         opponentComponentList.push(this);
     }

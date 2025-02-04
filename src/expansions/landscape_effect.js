@@ -1,8 +1,13 @@
-import { RootCard } from './cards.js';
+import { Card, RootCard } from './cards.js';
 import { getPlayer } from '../player.js';
 import { getHand, getPlayField } from '../features/PlayerSide/CardHolder/CardHolder.jsx';
 import { getLogger } from '../Components/Logger.jsx';
 import { findLandscapeEffect } from '../features/TableSide/LandscapeEffect/LandscapeEffect.jsx';
+import { PHASE_ACTION } from '../utils/constants.js';
+import { getDeck } from '../features/PlayerSide/CardPile/CardPile.jsx';
+import { mayPlayCardFromHand, playCardAsWay } from '../game_logic/Activity.js';
+import { setInstruction } from '../features/PlayerSide/Instruction.jsx';
+import { getSupportHand } from '../features/SupportHand.jsx';
 
 class LandscapeEffect extends RootCard{
     static Type = {
@@ -18,14 +23,11 @@ class LandscapeEffect extends RootCard{
         this.victory_token = 0;
         this.debt_token = 0;
         this.chosen_pile_name = ''; // Use for Obelisk
-
-        this.html_setup_main = document.getElementById('setup-main');
     }
     setup(){}
     is_buyed(){}
     play(){}
     add_score(){}
-    setup(){}
     should_activate(reason, card){return true;}
     activate(){}
     getVictoryToken(){
@@ -33,7 +35,7 @@ class LandscapeEffect extends RootCard{
     }
     async setVictoryToken(value){
         this.victory_token = value;
-        let landscapeComponent = findLandscapeEffect(component => component.getName() == this.name);
+        let landscapeComponent = findLandscapeEffect(component => component.getName() === this.name);
         await landscapeComponent.setVictoryToken(value);
     }
     getDebtToken(){
@@ -41,8 +43,11 @@ class LandscapeEffect extends RootCard{
     }
     async setDebtToken(value){
         this.debt_token = value;
-        let landscapeComponent = findLandscapeEffect(component => component.getName() == this.name);
+        let landscapeComponent = findLandscapeEffect(component => component.getName() === this.name);
         await landscapeComponent.setDebtToken(value);
+    }
+    getChosenPileName(){
+        return this.chosen_pile_name;
     }
     createMockObject(){
         let mockObj = super.createMockObject();
@@ -58,8 +63,8 @@ class LandscapeEffect extends RootCard{
         this.chosen_pile_name = mockObj.chsnplnm;
     }
     parseDataFromMockObjectGeneral(mockObj){ 
-        if(mockObj == undefined || mockObj.name == undefined || mockObj.name != this.name){
-            console.log(`cards.js, Name: ${this.name}`, mockObj);
+        if(!mockObj || !mockObj.name || mockObj.name !== this.name){
+            console.error(`cards.js, Name: ${this.name}`, mockObj);
             throw new Error('INVALID Mock Landscape Effect');
         }
         this.victory_token = mockObj.vctrtkn;
@@ -100,36 +105,63 @@ class Way extends LandscapeEffect{
         super(name, -1, ['Way'], additional_link, player);
     }
     play(card){
-        //TODO: let card play their text below dividing lines
+        //TODO: let card play their text below dividing lines (Highway, Peasant)
     }
-    should_activate_way(reason, card){
-        return (card == undefined && getPlayer().phase == 'action' && getHand().has_card(c => c.type.includes('Action')))
-                || (card!= undefined && card.type.includes('Action'));
+    should_activate_way(){
+        return getHand().has_card(c => c.type.includes(Card.Type.ACTION))
+            || getDeck().has_card(card => card.type.includes(Card.Type.ACTION) || card.type.includes(Card.Type.SHADOW));
     }
-    activate_way(reason, card){
-        if(card == undefined){
-            if(getHand().length() <= 0) return;
-            return new Promise((resolve) =>{
-                let is_marked = getHand().mark_cards(
-                    function(c){return c.type.includes('Action')},
-                    async function(c){
-                        getHand().remove_mark();
-                        await getHand().remove(c);
-                        await getPlayField().addCard(c);
-                        getLogger().writeMessage(`Play ${c.name} as ${this.name}`);
-                        await this.play(c);
-                        resolve('Way finish');
-                    }.bind(this),
-                    'discard',
-                );
-                if(!is_marked){
-                    resolve();
-                }
-            });
-            
-        } else{
+    activate_way(){
+        if(getHand().length() <= 0) return;
+        return new Promise((resolve) =>{
+            let clearFunc = function(){
+                getHand().remove_mark();
+                getSupportHand().clear();
+                getSupportHand().hide();
+                getDeck().removeCanSelect();
+                setInstruction('');
+            }
+            setInstruction(`${this.name}: Choose an Action card to play as Way.`)
+            let mayPlayAction = mayPlayCardFromHand(
+                function(c){
+                    return c.type.includes(Card.Type.ACTION);
+                },
+                async function(c){
+                    clearFunc();
 
-        }
+                    await getPlayField().addCard(c);
+                    await playCardAsWay(this, c);
+
+                    /*
+                    getLogger().writeMessage(`Play ${c.name} as ${this.name}`);
+                    await this.play(c);
+                    */
+                   
+                    resolve('Way finish');
+                }.bind(this),
+
+            );
+
+            /*
+            let is_marked = getHand().mark_cards(
+                function(c){return c.type.includes(Card.Type.ACTION)},
+                async function(c){
+                    getHand().remove_mark();
+                    await getHand().remove(c);
+                    await getPlayField().addCard(c);
+                    getLogger().writeMessage(`Play ${c.name} as ${this.name}`);
+                    await this.play(c);
+                    resolve('Way finish');
+                }.bind(this),
+                'discard',
+            );
+            if(!is_marked){
+                resolve();
+            }
+                */
+        });
+            
+        
     }
 }
 class Project extends LandscapeEffect{

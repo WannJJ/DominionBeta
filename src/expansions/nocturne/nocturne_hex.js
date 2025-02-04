@@ -1,19 +1,16 @@
-import {RootCard, Cost} from '../cards.js';
+import {RootCard, Cost, Card} from '../cards.js';
 import {Deluded, Envious, Lost_in_the_Woods, Miserable, TwiceMiserable} from "./nocturne_state.js";
 import { stateHolder } from './HexBoonManager.js';
 
-import { getPlayField, getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getDiscard, getDeck, getTrash } from '../../features/PlayerSide/CardPile/CardPile.jsx';
-import { getPlayArea, getExile, getSetAside } from '../../features/PlayerSide/BottomLeftCorner/SideArea.jsx';
-import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
+import { getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
+import { getDiscard, getDeck, } from '../../features/PlayerSide/CardPile/CardPile.jsx';
 import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
-import { getSupportHand } from '../../features/SupportHand.jsx';
 
 import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
-import { draw1, drawNCards, mix_discard_to_deck, play_card,
-    gain_card, gain_card_name, discard_card, trash_card, reveal_card, revealCardList, set_aside_card,
-    attack_other,
-    receive_state} from '../../game_logic/Activity.js';
+import { mix_discard_to_deck, gain_card, gain_card_name, 
+    discard_card, trash_card, reveal_card, receive_state,
+    shuffleDeck} from '../../game_logic/Activity.js';
+import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
 
 
 class Hex extends RootCard{
@@ -84,7 +81,7 @@ class Famine extends Hex{
         for(let i=0; i<n; i++){
             let card = await getDeck().pop();
             await reveal_card(card);
-            if(card.type.includes('Action')){
+            if(card.type.includes(Card.Type.ACTION)){
                 await discard_card(card, false);
             } else{
                 revealed_list.push(card);
@@ -94,7 +91,7 @@ class Famine extends Hex{
             let card = revealed_list.pop();
             await getDeck().addCard(card);
         }
-        await getDeck().shuffleDeck();
+        await shuffleDeck();
     }
 } 
 class Fear extends Hex{
@@ -106,26 +103,31 @@ class Fear extends Hex{
         return new Promise(async (resolve) => {
             this.chosen = 0;
             getHand().getCardAll().forEach(c => c.fear=undefined);
+            let clearFunc = async function(){
+                await getHand().remove_mark();
+                setInstruction('');
+            }
+            setInstruction('Fear: Discard an Action or Treasure (or reveal your hand).');
+
             let is_marked = getHand().mark_cards(
                 function(card){
-                    return this.chosen == 0 && (card.type.includes('Action') || card.type.includes('Treasure'));
+                    return this.chosen === 0 && (card.type.includes(Card.Type.ACTION) || card.type.includes(Card.Type.TREASURE));
                 }.bind(this),
                 async function(card){
-                    if(this.chosen == 0){
+                    await clearFunc();
+                    if(this.chosen === 0){
                         this.chosen = 1;
                         card.fear = true;
                         await discard_card(card, true); 
-                        
-                        await getHand().remove_mark();
                         resolve();
                     }
                 }.bind(this),
                 'discard');    
             if(!is_marked){
+                await clearFunc();
                 for(let card of getHand().getCardAll()){
                     await reveal_card(card);
                 }
-                await getHand().remove_mark();
                 resolve();
             }    
         });
@@ -136,9 +138,7 @@ class Greed extends Hex{
         super('Greed');
     }
     async is_received(){
-        let copper = await gain_card_name('Copper', false);
-        if(copper === undefined) return;
-        await getDeck().addCard(copper);
+        await gain_card_name('Copper', getDeck());
     }
 } 
 class Haunting extends Hex{
@@ -148,15 +148,20 @@ class Haunting extends Hex{
     is_received(){
         if(getHand().getLength() < 4) return;
         return new Promise((resolve) => {
+            let clearFunc = async function(){
+                await getHand().remove_mark();
+                setInstruction('');
+            };
+            setInstruction('Haunting: Put a card onto your deck.');
+
             getHand().mark_cards(
                 function(card){return true;},
                 async function(card){
+                    await clearFunc();
                     await getHand().remove(card);
                     await getDeck().addCard(card);
-
-                    await getHand().remove_mark();
                     resolve();
-                }.bind(this), 
+                }, 
                 'discard'); 
         });
     }
@@ -172,12 +177,18 @@ class Locusts extends Hex{
         const type = top_card.type, 
             cost = top_card.cost;
         await trash_card(top_card, false);
-        if(top_card.name === 'Copper' || top_card.name === 'Estate') await gain_card_name('Curse', true);
+        if(top_card.name === 'Copper' || top_card.name === 'Estate') await gain_card_name('Curse');
         else{
             if(cost.coin <= 0){
                 return;
             }
             return new Promise((resolve) => {
+                let clearFunc = function(){
+                    removeMarkSupplyPile();
+                    setInstruction('');
+                }
+                setInstruction('Locusts: Gain a cheaper card.');
+
                 let is_marked = markSupplyPile(
                     function(pile){
                         return pile.getType().find(t => type.includes(t)) && cost.isGreaterThan(pile.getCost()) && pile.getQuantity()>0;
@@ -187,9 +198,9 @@ class Locusts extends Hex{
 
                         removeMarkSupplyPile();
                         resolve('Locusts finish');
-                    }.bind(this));
+                    });
                 if(!is_marked){
-                    removeMarkSupplyPile();
+                    clearFunc();
                     resolve('Locusts finish');
                 }
             });
@@ -205,7 +216,7 @@ class Misery extends Hex{
         if(stateHolder.has_card(c => c.name === 'TwiceMiserable')) return;
         if(stateHolder.has_card(c => c.name === 'Miserable')){
             let miserable  = stateHolder.getStateByName('Miserable');
-            if(miserable != undefined){
+            if(miserable){
                 stateHolder.removeState(miserable);  
             }
             await receive_state(new TwiceMiserable());
@@ -219,8 +230,7 @@ class Plague extends Hex{
         super('Plague');
     }
     async is_received(){
-        let curse = await gain_card_name('Curse', false);
-        if(curse != undefined) await getHand().addCard(curse);
+        await gain_card_name('Curse', getHand());
     }
 } 
 class Poverty extends Hex{
@@ -236,12 +246,15 @@ class Poverty extends Hex{
             let clearFunc = async function(){
                 await getHand().remove_mark();
                 getButtonPanel().clear_buttons();
+                setInstruction('');
             }
+            getButtonPanel().clear_buttons();
+            setInstruction('Poverty: Discard down to 3 cards in hand.');
 
             getHand().getCardAll().forEach(c => c.poverty=undefined);
-            getButtonPanel().clear_buttons();
             getButtonPanel().add_button("OK", async function(){
                 if(this.chosen < n) return;
+                clearFunc();
                 for(let i=0; i<getHand().getLength(); i++){
                     let card = getHand().getCardAll()[i];
                     if(card.poverty){
@@ -250,13 +263,15 @@ class Poverty extends Hex{
                 }
                 resolve('Poverty finish');
             }.bind(this));
-            getHand().mark_cards(function(card){return this.chosen < n;}.bind(this),
+            getHand().mark_cards(
+                function(card){return this.chosen < n;}.bind(this),
                 function(card){
                     if(this.chosen < n){
                         this.chosen += 1;
                         card.poverty = true;
                     }
-                }.bind(this), 'discard');
+                }.bind(this), 
+                'discard');
         });
     }
 } 
@@ -278,7 +293,7 @@ class War extends Hex{
         while(!(minCost.isEqual(card.cost) || maxCost.isEqual(card.cost))){
             to_discard.push(card);
             await reveal_card(card);
-            if(getDeck().getLength() == 0){
+            if(getDeck().getLength() === 0){
                 if(shuffled){
                     await getDiscard().addCardList(to_discard);
                     return;
