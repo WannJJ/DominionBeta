@@ -1037,11 +1037,16 @@ const classMap = all_cards.reduce((acc, cls) => {
   acc[new cls().name] = cls;
   return acc;
 }, {});
+const classNameMap = all_cards.reduce((acc, cls) => {
+  acc[cls] = new cls().name;
+  return acc;
+});
 
 function getClassName(clss) {
   let name = undefined;
   try {
-    name = clss.name;
+    //name = clss.name;
+    name = classNameMap[clss];
   } catch {
     console.log("Class name: ", clss);
     alert("GetClassName ERROR");
