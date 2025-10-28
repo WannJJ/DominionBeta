@@ -14,7 +14,6 @@ import { shuffleArray } from "../utils/helpers";
 let allCardsData = [
   ...basicCardsData.cards,
   ...baseCardsData.cards,
-  ...seasideCardsData.cards,
   ...guildsCardsData.cards,
   ...menagerieCardsData.cards,
   ...empiresCardsData.cards,
@@ -22,6 +21,7 @@ let allCardsData = [
   ...nocturneCardsData.cards,
   ...plunderCardsData.cards,
   ...risingSunCardsData.cards,
+  ...seasideCardsData.cards,
 ];
 
 let all_events = allCardsData.filter((card) => {
@@ -30,17 +30,22 @@ let all_events = allCardsData.filter((card) => {
     card.type.includes("Landmark") ||
     card.type.includes("Way") ||
     card.type.includes("Trait") ||
-    card.type.includes("Project") ||
-    card.type.includes("Prophecy")
+    card.type.includes("Project")
+    //||card.type.includes("Prophecy")
   );
 });
 
-const not_finish = ["Way_of_the_Chameleon", "Journey", "Mountain_Pass"];
+const not_finish = [
+  "Way_of_the_Chameleon",
+  "Journey",
+  "Seize_the_Day",
+  "DivineWind",
+];
 
 const PregameEngine = {
   choose_kingdom: function () {
     let all_kingdom_cards = allCardsData;
-    //all_kingdom_cards = [...nocturneCardsData.cards];
+    //all_kingdom_cards = [...menagerieCardsData.cards];
 
     all_kingdom_cards = all_kingdom_cards.filter((card) => card.isKingdom);
     shuffleArray(all_kingdom_cards);
@@ -49,13 +54,9 @@ const PregameEngine = {
     let kingdomNameList = [];
 
     /*
-        kingdomNameList.push("Blockade");
-        kingdomNameList.push("Corsair");
-        kingdomNameList.push("Frigate");
-        kingdomNameList.push("FaithfulHound");
-        kingdomNameList.push("VillageGreen");
+        kingdomNameList.push("Outpost");
         */
-    //kingdomNameList.push("Sleigh");
+    //kingdomNameList.push("Sleigh"); 
 
     while (
       kingdomNameList.length < KINGDOM_COUNT &&
@@ -87,10 +88,28 @@ const PregameEngine = {
     ];
     return basic_cards;
   },
-  choose_landscape_effect: function () {
+  choose_prophecy: function (landscape_effects, kingdomList) {
+    const omenCardNames = allCardsData
+      .filter((card) => card.type.includes("Omen"))
+      .map((card) => card.name);
+    const prophecyList = allCardsData.filter(
+      (card) =>
+        card.type.includes("Prophecy") && !not_finish.includes(card.name)
+    );
+    if (omenCardNames.length <= 0 || prophecyList.length <= 0) return;
+    if (!kingdomList.find((name) => omenCardNames.includes(name))) return;
+
+    shuffleArray(prophecyList);
+    //landscape_effects.push("Enlightenment");
+    landscape_effects.push(prophecyList[0].name);
+    if (landscape_effects.includes("ApproachingArmy"))
+      this.setup_approaching_army(kingdomList);
+  },
+  choose_landscape_effect: function (kingdomList) {
     const EVENT_COUNT = 3;
     shuffleArray(all_events);
     let landscape_effects = [];
+    this.choose_prophecy(landscape_effects, kingdomList);
 
     while (landscape_effects.length < EVENT_COUNT && all_events.length > 0) {
       let card = all_events.pop();
@@ -100,6 +119,7 @@ const PregameEngine = {
     }
 
     //landscape_effects.push("Maelstrom");
+    //landscape_effects.push("Inherited");
 
     return landscape_effects.sort();
   },
@@ -153,6 +173,7 @@ const PregameEngine = {
       "Looting",
       "Invasion",
       "Prosper",
+      "Cursed",
     ];
     if (gain_loot_cards.find((card) => playCardList.includes(card))) {
       name_list.push("Loot");
@@ -243,13 +264,31 @@ const PregameEngine = {
     }
     return chosenCardName;
   },
+  setup_approaching_army: function (kingdomNameList) {
+    let chosenCardName = null;
+    let all_kingdom_cards = allCardsData.filter(
+      (card) => card.isKingdom && !not_finish.includes(card.name)
+    );
+    let unused_kingdom_cards = all_kingdom_cards.filter(
+      (card) => !kingdomNameList.includes(card.name)
+    );
+    shuffleArray(unused_kingdom_cards);
+    unused_kingdom_cards = unused_kingdom_cards.filter((card) =>
+      card.type.includes("Attack")
+    );
+    if (unused_kingdom_cards.length > 0) {
+      chosenCardName = unused_kingdom_cards[0].name;
+    }
+    kingdomNameList.push(chosenCardName);
+    return chosenCardName;
+  },
   /**
    * Generates game material: kingdom list, basic list, landscape, non supply
    */
   generate_materials: function () {
     let kingdomList = this.choose_kingdom(),
       basicList = this.choose_basic(),
-      landscapeEffectsList = this.choose_landscape_effect();
+      landscapeEffectsList = this.choose_landscape_effect(kingdomList);
 
     let nonSupplyList = this.choose_non_supply(
       kingdomList.concat(basicList).concat(landscapeEffectsList)

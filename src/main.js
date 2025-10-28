@@ -6,7 +6,12 @@ import { Opponent, opponentManager } from "./features/OpponentSide/Opponent";
 import PregameEngine from "./pregame/PregameEngine";
 
 import { react_other } from "./game_logic/Activity";
-import { GAME_STATUS } from "./utils/constants";
+import {
+  GAME_STATUS,
+  PHASE_ACTION,
+  PHASE_BUY,
+  PHASE_NIGHT,
+} from "./utils/constants";
 import { PlayerProfile } from "./game_logic/PlayerProfile";
 
 import { test } from "./pregame/test";
@@ -59,8 +64,6 @@ class GameEngine {
 
     // for interacting with server
     this.chatSocket = null;
-    this.last_report_id = -1;
-    this.players_react_my_activity = 0;
   }
 
   async run() {
@@ -143,8 +146,6 @@ class GameEngine {
         finish_setup(
           request_data,
           async function (data) {
-            //console.log("finish_setup from server", data);
-            //await this.start_game_multiplayer();
             await this.createGameWebSocket();
             complete = true;
             resolve();
@@ -167,7 +168,6 @@ class GameEngine {
 
   async run_playing_game(player_status, report, report_id) {
     console.log("Game is PLAYING, continue");
-    this.player.last_report_id = report_id;
 
     await getGameState().parse_report(report);
 
@@ -184,14 +184,19 @@ class GameEngine {
           await this.createGameWebSocket();
           if (player_status === STATUS_IDLE) {
           } else if (player_status === STATUS_PLAYING) {
-            if (!["action", "buy", "night"].includes(this.player.phase)) {
+            if (
+              ![PHASE_ACTION, PHASE_BUY, PHASE_NIGHT].includes(
+                this.player.phase
+              )
+            ) {
+              ////TODO: Should change to start turn
               alert(
                 `FORCE CHANGING PHASE! From current phase ${this.player.phase} to action phase`
               );
-              this.player.phase = "action";
+              this.player.phase = PHASE_ACTION;
             }
 
-            this.player.continue_phase();
+            await this.player.continue_phase();
           } else if (player_status === STATUS_WAITING) {
           }
 
@@ -305,14 +310,11 @@ class GameEngine {
         if (this.status !== STATUS_IDLE) {
           console.error("Status", this.status);
           throw new Error("");
-          return;
         }
 
         console.log(
           `Received status: ${player_status}, should be: ${STATUS_PLAYING}`
         );
-
-        //getPlayer().setTurn(JSON.parse(report).turn);
 
         let opponent = opponentManager
           .getOpponentList()
@@ -331,8 +333,6 @@ class GameEngine {
         username !== this.username &&
         data.activity === ACTIVITY_END_REACT
       ) {
-        //TODO
-
         //TODO: Cai nay bo dc
         let opponent = opponentManager
           .getOpponentList()
@@ -386,7 +386,6 @@ class GameEngine {
       nonSupply: JSON.stringify(materials[3]),
     };
     await this.setup_engine.finish_setup(data, this.player);
-    //await this.setup_engine.finish_setup("", this.player);
 
     await this.player.start_game();
     await this.player.start_turn();
@@ -474,13 +473,6 @@ class GameEngine {
    */
   report_ingame(activity, report, message = "", category = "", async = true) {
     if (!this.multiplayer_mode || !this.chatSocket) return;
-    let category1 = category;
-
-    if (this.status === STATUS_REACTING) {
-      //category1 = CATEGORY_REACTING;
-    } else if (this.status === STATUS_PLAYING) {
-      category1 = CATEGORY_PLAYING;
-    }
 
     if (activity === ACTIVITY_END_REACT)
       console.warn("category reacting", activity);
@@ -501,8 +493,6 @@ class GameEngine {
     );
 
     if (async) {
-      //this.time_to_resolve = time;
-      this.players_react_my_activity = 0;
       this.last_status = this.status;
       //this.status = STATUS_WAITING;
       return new Promise((resolve) => {

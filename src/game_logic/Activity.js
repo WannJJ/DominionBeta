@@ -28,20 +28,26 @@ import {
   report_save_activity3,
 } from "./report_save_activity";
 import {
+  ACTIVITY_OTHER_REACT_END_TURN,
   ACTIVITY_OTHER_REACT_GAIN,
+  PHASE_ACTION,
   PHASE_BUY,
   PHASE_REACTION,
   PHASE_WAITING,
 } from "../utils/constants";
 import audioManager from "../Audio/audioManager";
 import { opponentManager } from "../features/OpponentSide/Opponent";
-import { reactionEffectManager } from "./ReactionEffectManager";
+import {
+  reactionEffectManager,
+  REASON_WHEN_DISCARD,
+  REASON_WHEN_PLAY,
+  REASON_WHEN_TRASH,
+} from "./ReactionEffectManager";
 import {
   HexBoonManager,
   stateHolder,
 } from "../expansions/nocturne/HexBoonManager";
 import { getClassFromName } from "../setup";
-import { shuffleArray } from "../utils/helpers";
 import { getSupportHand } from "../features/SupportHand";
 import { setInstruction } from "../features/PlayerSide/Instruction";
 
@@ -67,6 +73,8 @@ import {
 } from "../utils/constants";
 import { getTableSide } from "../features/TableSide/TableSide";
 import { create_number_picker } from "../Components/user_input/NumberPicker";
+import { findLandscapeEffect } from "../features/TableSide/LandscapeEffect/LandscapeEffect";
+import { getType } from "./basicCardFunctions";
 
 /*
 class Activity{
@@ -106,9 +114,9 @@ async function draw1() {
   if (getDeck().length() > 0) {
     new_card = await getDeck().pop();
     await getHand().addCard(new_card);
-    report_save_activity(ACTIVITY_DRAW, new_card);
-
+    let activity = report_save_activity(ACTIVITY_DRAW, new_card);
     report_save_activity2(ACTIVITY_DRAW);
+    activity.setFinish();
   }
   return new_card;
 }
@@ -132,26 +140,10 @@ async function drawNCards(N) {
     n -= 1;
   }
 
-  /*
-    if(cardList.length > 0){
-        report_save_activity(ACTIVITY_DRAW, null, cardList);
-        cardList = [];
-    } 
-
-    if(n > 0 && deck.length() <= 0 && discard.length() > 0) {
-        await mix_discard_to_deck();
-    }
-    while(n > 0 && deck.length() > 0){
-        newCard = await deck.pop();
-        await hand.addCard(newCard);
-        cardList.push(newCard);
-        n -= 1;
-    }
-    */
   if (cardList.length > 0) {
-    report_save_activity(ACTIVITY_DRAW, null, cardList);
-
+    let activity = report_save_activity(ACTIVITY_DRAW, null, cardList);
     report_save_activity2(`${ACTIVITY_DRAW} ${N} cards`);
+    activity.setFinish();
   }
   return cardList;
 }
@@ -165,28 +157,32 @@ async function mix_discard_to_deck() {
 async function shuffleCardsIntoDeck(cards) {
   if (!Array.isArray(cards)) throw new Error("");
 
-  await reactionEffectManager.solve_cards_when_shuffle(cards);
-  shuffleArray(cards);
-  await getDeck().setCardAll([...cards, ...getDeck().getCardAll()]);
+  let shuffledCards = await reactionEffectManager.solve_cards_when_shuffle(
+    cards
+  );
+  //shuffleArray(cards);
+  await getDeck().setCardAll([...shuffledCards, ...getDeck().getCardAll()]);
 
   audioManager.playSound("shuffle");
-  report_save_activity(ACTIVITY_SHUFFLE, undefined);
-
+  let activity = report_save_activity(ACTIVITY_SHUFFLE, undefined);
   report_save_activity2(ACTIVITY_SHUFFLE);
+  activity.setFinish();
 }
 async function shuffleDeck() {
   // Use for Famine, Annex, Donate.
   let deckCards = getDeck().getCardAll();
   await getDeck().setCardAll([]);
 
-  await reactionEffectManager.solve_cards_when_shuffle(deckCards);
-  shuffleArray(deckCards);
-  await getDeck().setCardAll(deckCards);
+  let shuffledCards = await reactionEffectManager.solve_cards_when_shuffle(
+    deckCards
+  );
+  //shuffleArray(deckCards);
+  await getDeck().setCardAll(shuffledCards);
 
   audioManager.playSound("shuffle");
-  report_save_activity(ACTIVITY_SHUFFLE, undefined);
-
+  let activity = report_save_activity(ACTIVITY_SHUFFLE, undefined);
   report_save_activity2(ACTIVITY_SHUFFLE);
+  activity.setFinish();
 }
 
 function mayPlayCardFromHand(conditionCallback, callback) {
@@ -197,7 +193,7 @@ function mayPlayCardFromHand(conditionCallback, callback) {
     ) &&
     !getDeck().has_card(
       (card) =>
-        card.type.includes(Card.Type.SHADOW) &&
+        getType(card).includes(Card.Type.SHADOW) &&
         (!conditionCallback || conditionCallback(card))
     )
   ) {
@@ -220,7 +216,7 @@ function mayPlayCardFromHand(conditionCallback, callback) {
       let removed = await getHand().removeCardById(card.id);
       if (removed) {
         if (callback) {
-          callback(card);
+          await callback(card);
         }
       }
     },
@@ -230,7 +226,7 @@ function mayPlayCardFromHand(conditionCallback, callback) {
   if (
     getDeck().has_card(
       (card) =>
-        card.type.includes(Card.Type.SHADOW) &&
+        getType(card).includes(Card.Type.SHADOW) &&
         (!conditionCallback || conditionCallback(card))
     )
   ) {
@@ -243,7 +239,7 @@ function mayPlayCardFromHand(conditionCallback, callback) {
           .getCardAll()
           .filter(
             (card) =>
-              card.type.includes(Card.Type.SHADOW) &&
+              getType(card).includes(Card.Type.SHADOW) &&
               (!conditionCallback || conditionCallback(card))
           )
       );
@@ -273,73 +269,32 @@ async function play_card(card, play_in_playField = true) {
   if (play_in_playField) {
     await getPlayField().addCard(card);
   }
-  report_save_activity(ACTIVITY_PLAY, card);
+
+  let activity = report_save_activity(ACTIVITY_PLAY, card);
   getLogger().indent_();
 
-  if (card.type.includes(Card.Type.ATTACK)) {
+  await reactionEffectManager.solve_cards_first_when_play(card);
+  if (getType(card).includes(Card.Type.ATTACK)) {
     await report_save_activity2(ACTIVITY_PLAY, card);
   } else {
     report_save_activity2(ACTIVITY_PLAY, card);
   }
 
-  // do the card's job
-  /*TODO: Solve when_you_can_play_card_from_hand, (Cho Ways, Entchantress, Highwayman, Enlightenment) (Chi 1 cai co tac dung, do player chon)
-             when_you_play_card_first, 
-             when_another_player_plays_card_first
-    */
-
-  if (
-    card.type.includes(Card.Type.ACTION) &&
-    getPlayer().is_attacked_by_enchantress
-  ) {
-    getLogger().writeMessage("Player is attacked by Enchantress");
-    await draw1();
-    await getBasicStats().addAction(1);
-    getPlayer().is_attacked_by_enchantress = false;
-  } else {
-    await card.play();
+  let playCardNormally = await reactionEffectManager.solve_cards_when_play(
+    card,
+    activity.origin ? true : false // || getPlayer().phase !== PHASE_ACTION
+  );
+  if (playCardNormally) {
+    playCardNormally = await reactionEffectManager.solve_cards_on_play(card);
+    if (playCardNormally) await card.play();
   }
 
   report_save_activity3(ACTIVITY_PLAY, card);
-  await reactionEffectManager.solve_cards_when_play(card);
+  await reactionEffectManager.solve_cards_after_playing(card);
+  activity.setFinish();
   getLogger().deindent();
 }
-async function playCard(card) {
-  report_save_activity(ACTIVITY_PLAY, card);
-  getLogger().indent_();
 
-  if (card.type.includes(Card.Type.ATTACK)) {
-    await report_save_activity2(ACTIVITY_PLAY, card);
-  } else {
-    report_save_activity2(ACTIVITY_PLAY, card);
-  }
-
-  // do the card's job
-  if (
-    card.type.includes(Card.Type.ACTION) &&
-    getPlayer().is_attacked_by_enchantress
-  ) {
-    getLogger().writeMessage("Player is attacked by Enchantress");
-    await draw1();
-    await getBasicStats().addAction(1);
-    getPlayer().is_attacked_by_enchantress = false;
-  } else {
-    await card.play();
-  }
-
-  report_save_activity3(ACTIVITY_PLAY, card);
-  await reactionEffectManager.solve_cards_when_play(card);
-  getLogger().deindent();
-}
-async function playCardInPlayField(card) {
-  await getPlayField().addCard(card);
-  await playCard(card);
-}
-async function playCardFromHandInPlayField(card) {
-  let removed = await getHand().remove(card);
-  if (!removed) return;
-  await playCardInPlayField(card);
-}
 async function autoplay_treasures() {
   let treasure_list = [];
   let totalValue = 0;
@@ -347,7 +302,7 @@ async function autoplay_treasures() {
   for (let i = 0; i < getHand().length(); i++) {
     let card = getHand().getCardAll()[i];
     if (
-      card.type.includes(Card.Type.TREASURE) &&
+      getType(card).includes(Card.Type.TREASURE) &&
       ["Copper", "Silver", "Gold", "Platinum"].includes(card.name)
     ) {
       treasure_list.push(card);
@@ -355,7 +310,7 @@ async function autoplay_treasures() {
     }
   }
   if (treasure_list.length > 0) {
-    report_save_activity(
+    let activity = report_save_activity(
       ACTIVITY_AUTOPLAY_TREASURES,
       null,
       treasure_list,
@@ -369,13 +324,21 @@ async function autoplay_treasures() {
       await getHand().remove(card);
       await getPlayField().addCard(card);
 
-      await card.play();
+      await reactionEffectManager.solve_cards_first_when_play(card);
 
-      await reactionEffectManager.solve_cards_when_play(card);
+      let playCardNormally = await reactionEffectManager.solve_cards_when_play(
+        card
+      );
+      if (playCardNormally) {
+        await card.play();
+      }
+
+      await reactionEffectManager.solve_cards_after_playing(card);
     }
 
     getLogger().deindent();
     report_save_activity3(ACTIVITY_AUTOPLAY_TREASURES, null, treasure_list);
+    activity.setFinish();
   }
 }
 
@@ -440,24 +403,32 @@ async function buy_landscape_card(effect_card) {
   if (getPlayer().phase !== PHASE_BUY || getBasicStats().getBuy() <= 0) {
     return false;
   }
-  await pay_cost_when_buy(effect_card.cost);
+  await pay_cost_when_buy(effect_card.getCost());
 
-  report_save_activity(ACTIVITY_BUY, effect_card);
+  let activity = report_save_activity(ACTIVITY_BUY, effect_card);
   getLogger().indent_();
   report_save_activity2(ACTIVITY_BUY, effect_card);
   await effect_card.is_buyed();
 
   getLogger().deindent();
   report_save_activity3(ACTIVITY_BUY, effect_card);
+  activity.setFinish();
 }
 
 async function playCardAsWay(wayCard, card) {
-  report_save_activity(ACTIVITY_PLAY_AS_WAY, wayCard, [card]);
+  if (!wayCard || !card) throw new Error();
+  let activity = report_save_activity(ACTIVITY_PLAY_AS_WAY, wayCard, [card]);
   getLogger().indent_();
-  await wayCard.play(card);
 
-  //await report_save_activity2(ACTIVITY_PLAY_AS_WAY, wayCard, [card]);
+  if (wayCard.type.includes("Way")) {
+    await wayCard.play(card);
+  } else {
+    await wayCard.activate(REASON_WHEN_PLAY, card);
+  }
+
+  await report_save_activity2(ACTIVITY_PLAY_AS_WAY, wayCard, [card]);
   getLogger().deindent();
+  activity.setFinish();
 }
 
 // Applying Stop-Moving Rule and No Visiting Rule
@@ -514,6 +485,7 @@ async function processGainCard(
     await remove_from_exile(new_card);
   }
 
+  activity.setFinish();
   getLogger().deindent();
   return new_card;
 }
@@ -604,13 +576,14 @@ async function gainCardByType(typeName, gainLocation = getDiscard()) {
 async function receive_boon() {
   let nextCard = HexBoonManager.popNextBoon();
   if (!nextCard) return undefined;
-  report_save_activity(ACTIVITY_RECEIVE, nextCard);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, nextCard);
   getLogger().indent_();
   await report_save_activity2(ACTIVITY_RECEIVE, nextCard);
 
   await HexBoonManager.receiveBoon(nextCard);
 
   report_save_activity3(ACTIVITY_RECEIVE, nextCard);
+  activity.setFinish();
   getLogger().deindent();
   return nextCard;
 }
@@ -618,40 +591,45 @@ function discardTopBoon() {
   // For Pixie
   let topBoon = HexBoonManager.popNextBoon();
   if (!topBoon) return;
-  report_save_activity(ACTIVITY_DISCARD, topBoon);
+  let activity = report_save_activity(ACTIVITY_DISCARD, topBoon);
+  activity.setFinish();
   return topBoon;
 }
 async function receive_boon_twice(boonCard) {
   //For Pixie
   if (!boonCard) return;
-  report_save_activity(ACTIVITY_RECEIVE, boonCard);
-  report_save_activity(ACTIVITY_RECEIVE, boonCard);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, boonCard);
+  let activity1 = report_save_activity(ACTIVITY_RECEIVE, boonCard);
   getLogger().indent_();
   await report_save_activity2(ACTIVITY_RECEIVE, boonCard);
   await report_save_activity2(ACTIVITY_RECEIVE, boonCard);
   await HexBoonManager.receiveBoonTwice(boonCard);
 
   report_save_activity3(ACTIVITY_RECEIVE, boonCard);
+  activity.setFinish();
+  activity1.setFinish();
   getLogger().deindent();
   return boonCard;
 }
 function takeABoonAsBlessedVillage() {
   let boonCard = HexBoonManager.takeBoonAsBlessedVillage();
   if (!boonCard) return;
-  report_save_activity(ACTIVITY_DISCARD, boonCard);
+  let activity = report_save_activity(ACTIVITY_DISCARD, boonCard);
+  activity.setFinish();
   return boonCard;
 }
 async function receiveBoonAsBlessedVillage(boonId) {
   if (!boonId) return;
   let boonCard = await HexBoonManager.popBoonAsBlessedVillage(boonId);
   if (!boonCard) return;
-  report_save_activity(ACTIVITY_RECEIVE, boonCard);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, boonCard);
   getLogger().indent_();
   await report_save_activity2(ACTIVITY_RECEIVE, boonCard);
 
   await HexBoonManager.receiveBoon(boonCard);
 
   report_save_activity3(ACTIVITY_RECEIVE, boonCard);
+  activity.setFinish();
   getLogger().deindent();
   return boonCard;
 }
@@ -666,33 +644,48 @@ async function setAsideTop3Boons() {
 }
 async function receiveBoonAsDruid(boonCard) {
   if (!boonCard) return;
-  report_save_activity(ACTIVITY_RECEIVE, boonCard);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, boonCard);
   getLogger().indent_();
   await report_save_activity2(ACTIVITY_RECEIVE, boonCard);
 
   await HexBoonManager.receiveBoon(boonCard, true);
 
   report_save_activity3(ACTIVITY_RECEIVE, boonCard);
+  activity.setFinish();
+  getLogger().deindent();
+  return boonCard;
+}
+async function receiveBoonAsSacredGroveOther(boonName) {
+  let cardClass = getClassFromName(boonName);
+  let boonCard = new cardClass();
+  let activity = report_save_activity(ACTIVITY_RECEIVE, boonCard);
+  getLogger().indent_();
+  await report_save_activity2(ACTIVITY_RECEIVE, boonCard);
+
+  await HexBoonManager.receiveBoon(boonCard, true);
+  report_save_activity3(ACTIVITY_RECEIVE, boonCard);
+  activity.setFinish();
   getLogger().deindent();
   return boonCard;
 }
 async function receive_hex() {
   let nextCard = HexBoonManager.getNextHex();
   if (!nextCard) return undefined;
-  report_save_activity(ACTIVITY_RECEIVE, nextCard);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, nextCard);
   getLogger().indent_();
   await report_save_activity2(ACTIVITY_RECEIVE, nextCard);
 
   let newCard = await HexBoonManager.receiveHex();
 
   report_save_activity3(ACTIVITY_RECEIVE, newCard);
+  activity.setFinish();
   getLogger().deindent();
   return newCard;
 }
 
 async function receive_state(state_card) {
   if (!state_card) return;
-  report_save_activity(ACTIVITY_RECEIVE, state_card);
+  let activity = report_save_activity(ACTIVITY_RECEIVE, state_card);
   getLogger().indent_();
   report_save_activity2(ACTIVITY_RECEIVE, state_card);
 
@@ -701,6 +694,7 @@ async function receive_state(state_card) {
   await getPlayer().update_score();
 
   report_save_activity3(ACTIVITY_RECEIVE, state_card);
+  activity.setFinish();
   getLogger().deindent();
 }
 
@@ -710,28 +704,80 @@ async function discard_card(card, from_hand = true) {
       throw new Error("CANT REMOVE FROM HAND");
     }
   }
-  report_save_activity(ACTIVITY_DISCARD, card);
+  let activity = report_save_activity(ACTIVITY_DISCARD, card);
   getLogger().indent_();
   await getDiscard().addCard(card);
   report_save_activity2(ACTIVITY_DISCARD, card);
 
   await card.is_discarded();
 
-  report_save_activity3(ACTIVITY_DISCARD, card);
   await reactionEffectManager.solve_cards_when_discard(card);
+  report_save_activity3(ACTIVITY_DISCARD, card);
+  activity.setFinish();
   getLogger().deindent();
   return true;
 }
+
+async function discardCardList(cardList = [], fromHand = true) {
+  cardList = cardList.map((card) => card);
+  if (cardList.length === 0) return;
+  if (cardList.find((card) => !(card instanceof Card)))
+    throw new Error("Invalid card, Cant discard");
+
+  let discardedList = [];
+
+  for (let card of cardList) {
+    if (fromHand) {
+      if (!(await getHand().remove(card))) {
+        throw new Error("CANT TRASH");
+      }
+    }
+    await getDiscard().addCard(card);
+    await getPlayer().update_score();
+    //await card.is_trashed();
+    discardedList.push(card);
+
+    let whenDiscardEffectList = reactionEffectManager.get_possible_cards(
+      REASON_WHEN_DISCARD,
+      card
+    );
+    if (whenDiscardEffectList.length > 0) {
+      let activity = report_save_activity(
+        ACTIVITY_DISCARD,
+        null,
+        discardedList
+      );
+      report_save_activity2(ACTIVITY_DISCARD, null, discardedList);
+      getLogger().indent_();
+
+      await reactionEffectManager.solve_cards_when_discard(card);
+      getLogger().deindent();
+      report_save_activity3(ACTIVITY_DISCARD, null, discardedList);
+      activity.setFinish();
+      discardedList = [];
+    }
+  }
+  if (discardedList.length > 0) {
+    let activity = report_save_activity(ACTIVITY_DISCARD, null, discardedList);
+    report_save_activity2(ACTIVITY_DISCARD, null, discardedList);
+
+    report_save_activity3(ACTIVITY_DISCARD, null, discardedList);
+    activity.setFinish();
+  }
+  return true;
+}
+
 async function discardCard(card) {
-  report_save_activity(ACTIVITY_DISCARD, card);
+  let activity = report_save_activity(ACTIVITY_DISCARD, card);
   getLogger().indent_();
   await getDiscard().addCard(card);
   report_save_activity2(ACTIVITY_DISCARD, card);
 
   await card.is_discarded();
 
-  report_save_activity3(ACTIVITY_DISCARD, card);
   await reactionEffectManager.solve_cards_when_discard(card);
+  report_save_activity3(ACTIVITY_DISCARD, card);
+  activity.setFinish();
   getLogger().deindent();
   return true;
 }
@@ -756,7 +802,7 @@ async function trash_card(card, from_hand = true) {
       throw new Error("CANT TRASH");
     }
   }
-  report_save_activity(ACTIVITY_TRASH, card);
+  let activity = report_save_activity(ACTIVITY_TRASH, card);
   getLogger().indent_();
   await getTrash().addCard(card);
   report_save_activity2(ACTIVITY_TRASH, card);
@@ -766,39 +812,63 @@ async function trash_card(card, from_hand = true) {
   await getPlayer().update_score();
   report_save_activity3(ACTIVITY_TRASH, card);
   await reactionEffectManager.solve_cards_when_trash(card);
+  activity.setFinish();
   getLogger().deindent();
   return true;
 }
-async function trashCard(card) {
-  report_save_activity(ACTIVITY_TRASH, card);
-  getLogger().indent_();
-  await getTrash().addCard(card);
-  report_save_activity2(ACTIVITY_TRASH, card);
 
-  await card.is_trashed();
+async function trashCardList(cardList = [], fromHand = true) {
+  cardList = cardList.map((card) => card);
+  if (cardList.length === 0) return;
+  if (cardList.find((card) => !(card instanceof Card)))
+    throw new Error("Invalid card, Cant trash");
 
-  await getPlayer().update_score();
-  report_save_activity3(ACTIVITY_TRASH, card);
-  await reactionEffectManager.solve_cards_when_trash(card);
-  getLogger().deindent();
-  return card;
-}
-async function trashCardFromHand(card) {
-  let removed = await getHand().remove(card);
-  if (!removed) throw new Error("Cant remove from hand");
-  await trashCard(card);
-}
-async function trashCardFromPlayField(card) {
-  let removed = await getPlayField().remove(card);
-  if (!removed) throw new Error("Cant remove from play");
-  await trashCard(card);
+  let trashedList = [];
+
+  for (let card of cardList) {
+    if (fromHand) {
+      if (!(await getHand().remove(card))) {
+        throw new Error("CANT TRASH");
+      }
+    }
+    await getTrash().addCard(card);
+    await getPlayer().update_score();
+    //await card.is_trashed();
+    trashedList.push(card);
+
+    let whenTrashedEffectList = reactionEffectManager.get_possible_cards(
+      REASON_WHEN_TRASH,
+      card
+    );
+    if (whenTrashedEffectList.length > 0) {
+      let activity = report_save_activity(ACTIVITY_TRASH, null, trashedList);
+      report_save_activity2(ACTIVITY_TRASH, null, trashedList);
+      getLogger().indent_();
+
+      await reactionEffectManager.solve_cards_when_trash(card);
+      getLogger().deindent();
+      report_save_activity3(ACTIVITY_TRASH, null, trashedList);
+      activity.setFinish();
+      trashedList = [];
+    }
+  }
+  if (trashedList.length > 0) {
+    let activity = report_save_activity(ACTIVITY_TRASH, null, trashedList);
+    report_save_activity2(ACTIVITY_TRASH, null, trashedList);
+
+    report_save_activity3(ACTIVITY_TRASH, null, trashedList);
+    activity.setFinish();
+    trashedList = [];
+  }
+  return true;
 }
 
 /*
 async function activate_card(duration_card, reason, card){
-    report_save_activity(ACTIVITY_ACTIVATE, duration_card); 
+    let activity = report_save_activity(ACTIVITY_ACTIVATE, duration_card); 
     await duration_card.activate(reason, card);
     await report_save_activity2(ACTIVITY_ACTIVATE, duration_card);
+    activity.setFinish();
 }
 */
 async function reveal_card(card) {
@@ -808,10 +878,11 @@ async function reveal_card(card) {
     throw new Error();
   }
 
-  report_save_activity(ACTIVITY_REVEAL, card);
+  let activity = report_save_activity(ACTIVITY_REVEAL, card);
   getLogger().indent_();
 
   report_save_activity2(ACTIVITY_REVEAL, card);
+  activity.setFinish();
   getLogger().deindent();
 
   return card;
@@ -822,10 +893,11 @@ async function revealCardList(cardList) {
     throw new Error();
   }
 
-  report_save_activity(ACTIVITY_REVEAL, null, cardList);
+  let activity = report_save_activity(ACTIVITY_REVEAL, null, cardList);
   getLogger().indent_();
 
   report_save_activity2(ACTIVITY_REVEAL, null, cardList);
+  activity.setFinish();
   getLogger().deindent();
 
   return cardList;
@@ -843,23 +915,25 @@ function reveal_deck(n) {
 }
 async function exile_card(card) {
   if (!card || !card.name || !card.type) return undefined;
-  report_save_activity(ACTIVITY_EXILE, card);
+  let activity = report_save_activity(ACTIVITY_EXILE, card);
   getLogger().indent_();
 
   await getExile().addCard(card);
   report_save_activity2(ACTIVITY_EXILE, card);
 
   await getPlayer().update_score();
+  activity.setFinish();
   getLogger().deindent();
   return true;
 }
 async function set_aside_card(card) {
-  report_save_activity(ACTIVITY_SET_ASIDE, card);
+  let activity = report_save_activity(ACTIVITY_SET_ASIDE, card);
   getLogger().indent_();
 
   await getSetAside().addCard(card);
   report_save_activity2(ACTIVITY_SET_ASIDE, card);
 
+  activity.setFinish();
   getLogger().deindent();
 }
 function remove_from_exile(gainCard) {
@@ -905,6 +979,13 @@ function remove_from_exile(gainCard) {
     });
   });
 }
+async function remove_sun_token() {
+  let prophecy = findLandscapeEffect((component) =>
+    component.getCard().type.includes("Prophecy")
+  );
+  if (prophecy) await prophecy.getCard().removeSunToken();
+}
+
 async function attack_other(card, additional_info) {
   if (!card || !card.name) return;
 
@@ -914,12 +995,28 @@ async function attack_other(card, additional_info) {
     await is_attacked(attackCard, additional_info);
     //await is_attacked(card, additional_info);
   } else {
-    report_save_activity(ACTIVITY_ATTACK, card.name);
+    let activity = report_save_activity(ACTIVITY_ATTACK, card.name);
     getLogger().indent_();
 
     await report_save_activity2(ACTIVITY_ATTACK, card, [], additional_info);
+    activity.setFinish();
     getLogger().deindent();
   }
+}
+
+async function announceOtherEndTurn() {
+  if (opponentManager.getOpponentList().length <= 0) return;
+  getLogger().indent_();
+  for (let opponent of opponentManager.getOpponentList()) {
+    await report_save_activity2(
+      ACTIVITY_OTHER_REACT_END_TURN,
+      null,
+      [],
+      opponent.username
+    );
+  }
+
+  getLogger().deindent();
 }
 
 // Use by Advisor, HauntedCastle, ChariotRace, Gladiator
@@ -959,27 +1056,34 @@ async function react_other(username, JSONactivity, message) {
 
   if (activity.card) {
     card_class = getClassFromName(activity.card.name);
-    //card_class = getClassFromName(activity.card);
     card = new card_class(this);
     card.parseDataFromMockObject(activity.card, true);
-  } else if (Array.isArray(activity.cardList)) {
+  }
+  if (Array.isArray(activity.cardList)) {
     cardList = activity.cardList.map((c) => {
       let cardClass = getClassFromName(c.name);
       let newCard = new cardClass();
       newCard.parseDataFromMockObject(c, true);
       return newCard;
     });
-    //card_class = activity.cardList.map(c => getClassFromName(c));
   }
 
   let new_activity = new Activity(username, activity.name, card, cardList);
 
   if (
-    ![ACTIVITY_OTHER_REACT_GAIN, ACTIVITY_MESSAGE_OTHER].includes(activity.name)
+    ![
+      ACTIVITY_OTHER_REACT_GAIN,
+      ACTIVITY_OTHER_REACT_END_TURN,
+      ACTIVITY_MESSAGE_OTHER,
+    ].includes(activity.name)
   )
     getLogger().writeActivity(new_activity);
 
-  if (activity.name === ACTIVITY_PLAY && card && card.type.includes("Attack")) {
+  if (
+    activity.name === ACTIVITY_PLAY &&
+    card &&
+    card.type.includes(Card.Type.ATTACK)
+  ) {
     await reactionEffectManager.solve_cards_first_when_another_plays(
       card,
       new_activity
@@ -989,14 +1093,15 @@ async function react_other(username, JSONactivity, message) {
     } else {
       await is_attacked(card, message);
     }
-    /*} else if(activity.name === ACTIVITY_GAIN || activity.name === ACTIVITY_BUY_GAIN){
-        await reactionEffectManager.solve_cards_when_another_gains(card, new_activity);
-        */
   } else if (activity.name === ACTIVITY_OTHER_REACT_GAIN) {
     await reactionEffectManager.solve_cards_when_another_gains(
       card,
       new_activity
     );
+  } else if (activity.name === ACTIVITY_OTHER_REACT_END_TURN) {
+    if (getPlayer().username !== message) return ["", ""];
+    await reactionEffectManager.solve_cards_at_end_turn();
+    return ["", ""];
   } else if (activity.name === ACTIVITY_MESSAGE_OTHER) {
     let splitMess = message.split(";");
     if (splitMess.length > 1) {
@@ -1014,18 +1119,18 @@ async function react_other(username, JSONactivity, message) {
     await do_passive(card);
   }
 
+  new_activity.setFinish();
+
   //getPlayer().phase = PHASE_WAITING;
   getPlayer().setPhase(currentPhase);
 
   let report = getGameState().create_report();
 
-  //report_ingame(activity, report, message = "", category = "", async = true)
   let reactReport = report,
     reactMessage = `Agreee with ${activity.name} ${
       card ? card.name : ""
     } by ${username}`;
   return [reactReport, reactMessage];
-  //await getPlayer().report_ingame(ACTIVITY_END_REACT, report, 'Agree with '+activity.name +' ' + (card?card.name:'')+' by '+username, 'REACTING', false);
 }
 async function do_passive(card) {
   await card.do_passive();
@@ -1049,7 +1154,7 @@ export {
   mayPlayCardFromHand,
   playCardAsWay,
   play_card,
-  playCardFromHandInPlayField,
+  //playCardFromHandInPlayField,
   autoplay_treasures,
   may_payoff_debt,
   buy_and_gain_card,
@@ -1065,20 +1170,24 @@ export {
   takeABoonAsBlessedVillage,
   setAsideTop3Boons,
   receiveBoonAsDruid,
+  receiveBoonAsSacredGroveOther,
   discardTopBoon,
   receive_boon_twice,
   discard_card,
+  discardCardList,
   discardCardFromPlayField,
   //discardCard, discardCardFromHand,
   trash_card,
-  // trashCardFromHand, trashCardFromPlayField,
+  trashCardList,
   //activate_card,
   reveal_card,
   revealCardList,
   reveal_deck,
   exile_card,
   set_aside_card,
+  remove_sun_token,
   attack_other,
+  announceOtherEndTurn,
   message_other,
   react_other,
   do_passive,

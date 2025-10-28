@@ -1,26 +1,44 @@
-import { Card, Cost } from '../cards.js';
+import { Card, Cost } from "../cards.js";
 import { Event } from "../landscape_effect.js";
-import { REASON_START_TURN, REASON_WHEN_GAIN } from '../../game_logic/ReactionEffectManager.js';
+import {
+  REASON_START_TURN,
+  REASON_WHEN_GAIN,
+} from "../../game_logic/ReactionEffectManager.js";
 
-import { getHand } from '../../features/PlayerSide/CardHolder/CardHolder.jsx';
-import { getButtonPanel } from '../../features/PlayerSide/ButtonPanel.jsx';
+import { getHand } from "../../features/PlayerSide/CardHolder/CardHolder.jsx";
+import { getButtonPanel } from "../../features/PlayerSide/ButtonPanel.jsx";
 import {
   drawNCards,
-  gain_card, gain_card_name, shuffleCardsIntoDeck, shuffleDeck, trash_card,
-} from '../../game_logic/Activity.js';
-import { getDeck, getDiscard } from '../../features/PlayerSide/CardPile/CardPile.jsx';
-import { getBasicStats } from '../../features/PlayerSide/PlayerSide.jsx';
-import { getGameState } from '../../game_logic/GameState.js';
-import { getSupportHand } from '../../features/SupportHand.jsx';
-import { markSupplyPile, removeMarkSupplyPile } from '../../features/TableSide/Supply.jsx';
-import { findSupplyPile, findSupplyPileAll } from '../../features/TableSide/SupplyPile.jsx';
-import { getPlayer } from '../../player.js';
-import { PHASE_BUY } from '../../utils/constants.js';
-import { setInstruction } from '../../features/PlayerSide/Instruction.jsx';
+  gain_card,
+  gain_card_name,
+  shuffleCardsIntoDeck,
+  shuffleDeck,
+  trash_card,
+  trashCardList,
+} from "../../game_logic/Activity.js";
+import {
+  getDeck,
+  getDiscard,
+} from "../../features/PlayerSide/CardPile/CardPile.jsx";
+import { getBasicStats } from "../../features/PlayerSide/PlayerSide.jsx";
+import { getGameState } from "../../game_logic/GameState.js";
+import { getSupportHand } from "../../features/SupportHand.jsx";
+import {
+  markSupplyPile,
+  removeMarkSupplyPile,
+} from "../../features/TableSide/Supply.jsx";
+import {
+  findSupplyPile,
+  findSupplyPileAll,
+} from "../../features/TableSide/SupplyPile.jsx";
+import { getPlayer } from "../../player.js";
+import { PHASE_BUY } from "../../utils/constants.js";
+import { setInstruction } from "../../features/PlayerSide/Instruction.jsx";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 /*
 class  extends Event{
-    constructor(player){
-        super('', , "Empires/Event/", player);
+    constructor(){
+        super('', , "Empires/Event/", );
     }
     is_buyed(){
 
@@ -29,23 +47,22 @@ class  extends Event{
 */
 
 class Triumph extends Event {
-  constructor(player) {
-    super("Triumph", new Cost(0, 5), "Empires/Event/", player);
-    this.description = "Gain an Estate. If you did, +1 VP per card you've gained this turn.";
+  constructor() {
+    super("Triumph", new Cost(0, 5), "Empires/Event/");
+    this.description =
+      "Gain an Estate. If you did, +1 VP per card you've gained this turn.";
   }
   async is_buyed() {
     let estate = await gain_card_name("Estate");
     if (estate) {
       let card_gained_count = getGameState().cards_gained_this_turn.length;
-      await getBasicStats().addVictoryToken(card_gained_count)
-
+      await getBasicStats().addVictoryToken(card_gained_count);
     }
   }
 }
 class Annex extends Event {
-  constructor(player) {
-    //Debt
-    super("Annex", new Cost(0, 8), "Empires/Event/", player);
+  constructor() {
+    super("Annex", new Cost(0, 8), "Empires/Event/");
     this.description =
       "Look through your discard pile. Shuffle all but up to 5 cards from it into your deck. Gain a Duchy.";
   }
@@ -65,33 +82,34 @@ class Annex extends Event {
       let cardList = [];
       let clearFunc = function () {
         getButtonPanel().clear_buttons();
-        setInstruction('');
+        setInstruction("");
         supportHand.remove_mark();
-      }
+      };
       getButtonPanel().clear_buttons();
-      setInstruction('Annex: Shuffle all but up to 5 cards from discard pile into your deck.');
-
-      getButtonPanel().add_button(
-        "OK",
-        async function () {
-          clearFunc();
-          for (let card of supportHand.getCardAll()) {
-            if (!card.annex) {
-              cardList.push(card);
-            }
-          }
-
-          await shuffleCardsIntoDeck(cardList);
-
-          await supportHand.setCardAll(supportHand.getCardAll().filter((card) => card.annex));
-          await getDiscard().addCardList(supportHand.getCardAll());
-          supportHand.clear();
-          supportHand.hide();
-
-          await gain_card_name("Duchy");
-          resolve("Annex finish");
-        }
+      setInstruction(
+        "Annex: Shuffle all but up to 5 cards from discard pile into your deck."
       );
+
+      getButtonPanel().add_button("OK", async function () {
+        clearFunc();
+        for (let card of supportHand.getCardAll()) {
+          if (!card.annex) {
+            cardList.push(card);
+          }
+        }
+
+        await shuffleCardsIntoDeck(cardList);
+
+        await supportHand.setCardAll(
+          supportHand.getCardAll().filter((card) => card.annex)
+        );
+        await getDiscard().addCardList(supportHand.getCardAll());
+        supportHand.clear();
+        supportHand.hide();
+
+        await gain_card_name("Duchy");
+        resolve("Annex finish");
+      });
 
       supportHand.mark_cards(
         function (card) {
@@ -102,18 +120,19 @@ class Annex extends Event {
           this.chosen += 1;
           this.card_list.push(card);
         }.bind(this),
-        'discard',
+        "discard"
       );
     });
   }
 }
 class Donate extends Event {
-  constructor(player) {
-    super("Donate", new Cost(0, 8), "Empires/Event/", player);
+  constructor() {
+    super("Donate", new Cost(0, 8), "Empires/Event/");
     this.activate_when_start_turn = true;
     this.activate_currently = false;
     this.turn = -1;
-    this.description = "At the start of your next turn, first, put your deck and discard pile into your hand, trash any number of cards from it, then shuffle the rest into your deck and draw 5 cards.";
+    this.description =
+      "At the start of your next turn, first, put your deck and discard pile into your hand, trash any number of cards from it, then shuffle the rest into your deck and draw 5 cards.";
   }
   is_buyed() {
     this.activate_currently = true;
@@ -130,7 +149,7 @@ class Donate extends Event {
     this.activate_currently = false;
     getButtonPanel().clear_buttons();
     await getHand().addCardList(getDeck().getCardAll());
-    await getDeck().setCardAll([])
+    await getDeck().setCardAll([]);
     await getHand().addCardList(getDiscard().getCardAll());
     await getDiscard().setCardAll([]);
     return new Promise((resolve) => {
@@ -139,20 +158,19 @@ class Donate extends Event {
 
       let clearFunc = async function () {
         getButtonPanel().clear_buttons();
-        setInstruction('');
+        setInstruction("");
         await getHand().remove_mark();
-      }
+      };
       getButtonPanel().clear_buttons();
-      setInstruction('Donate: Trash any number of cards, then shuffle the rest into your deck.');
+      setInstruction(
+        "Donate: Trash any number of cards, then shuffle the rest into your deck."
+      );
 
       getButtonPanel().add_button(
         "Confirm Trashing",
         async function () {
           if (this.card_list.length > 0) {
-            for (let i = 0; i < this.card_list.length; i++) {
-              let card = this.card_list[i];
-              await trash_card(card);
-            }
+            await trashCardList(this.card_list);
           }
           await this.activate_step1();
           await clearFunc();
@@ -180,8 +198,8 @@ class Donate extends Event {
   }
 }
 class Advance extends Event {
-  constructor(player) {
-    super("Advance", new Cost(0), "Empires/Event/", player);
+  constructor() {
+    super("Advance", new Cost(0), "Empires/Event/");
     this.description =
       "You may trash an Action card from your hand. If you do, gain an Action card costing up to $6.";
   }
@@ -194,7 +212,7 @@ class Advance extends Event {
       let clearFunc = async function () {
         getButtonPanel().clear_buttons();
         await getHand().remove_mark();
-      }
+      };
 
       getButtonPanel().clear_buttons();
       getButtonPanel().add_button(
@@ -215,7 +233,7 @@ class Advance extends Event {
           return (
             this.chosen === 0 &&
             !this.card &&
-            card.type.includes(Card.Type.ACTION)
+            getType(card).includes(Card.Type.ACTION)
           );
         }.bind(this),
         function (card) {
@@ -253,8 +271,8 @@ class Advance extends Event {
   }
 }
 class Delve extends Event {
-  constructor(player) {
-    super("Delve", new Cost(2), "Empires/Event/", player);
+  constructor() {
+    super("Delve", new Cost(2), "Empires/Event/");
   }
   async is_buyed() {
     await getBasicStats().addBuy(1);
@@ -262,14 +280,15 @@ class Delve extends Event {
   }
 }
 class Tax extends Event {
-  constructor(player) {
-    super("Tax", new Cost(2), "Empires/Event/", player);
+  constructor() {
+    super("Tax", new Cost(2), "Empires/Event/");
     this.activate_when_gain = true;
     this.activate_permanently = true;
-    this.description = "Add 2D to a Supply pile.Setup: Add 1D to each Supply pile. When a player gains a card in their Buy phase, they take the D from its pile.";
+    this.description =
+      "Add 2D to a Supply pile.Setup: Add 1D to each Supply pile. When a player gains a card in their Buy phase, they take the D from its pile.";
   }
   async setup() {
-    for (let pile of findSupplyPileAll(p => true)) {
+    for (let pile of findSupplyPileAll((p) => true)) {
       await pile.setDebtToken(pile.getDebtToken() + 1);
     }
   }
@@ -277,33 +296,35 @@ class Tax extends Event {
   is_buyed() {
     return new Promise((resolve) => {
       markSupplyPile(
-        p => true,
+        (p) => true,
         async function (pile) {
           await pile.setDebtToken(pile.getDebtToken() + 2);
           removeMarkSupplyPile();
-          resolve('Tax finish');
+          resolve("Tax finish");
         }
       );
     });
   }
   should_activate(reason, card) {
-    return reason === REASON_WHEN_GAIN
-      && card
-      && getPlayer().phase === PHASE_BUY
-      && findSupplyPile(pile => pile.isOriginOf(card))
-      && findSupplyPile(pile => pile.isOriginOf(card)).getDebtToken() > 0;
+    return (
+      reason === REASON_WHEN_GAIN &&
+      card &&
+      getPlayer().phase === PHASE_BUY &&
+      findSupplyPile((pile) => pile.isOriginOf(card))
+      // && findSupplyPile((pile) => pile.isOriginOf(card)).getDebtToken() > 0
+    );
   }
   async activate(reason, card) {
     if (!card) return;
-    let pile = findSupplyPile(pile => pile.isOriginOf(card));
+    let pile = findSupplyPile((pile) => pile.isOriginOf(card));
     if (!pile || pile.getDebtToken() <= 0) return;
     await getBasicStats().addDebt(pile.getDebtToken());
     await pile.setDebtToken(0);
   }
 }
 class Banquet extends Event {
-  constructor(player) {
-    super("Banquet", new Cost(3), "Empires/Event/", player);
+  constructor() {
+    super("Banquet", new Cost(3), "Empires/Event/");
     this.description =
       "Gain 2 Coppers and a non-Victory card costing up to $5.";
   }
@@ -334,8 +355,8 @@ class Banquet extends Event {
   }
 }
 class Ritual extends Event {
-  constructor(player) {
-    super("Ritual", new Cost(4), "Empires/Event/", player);
+  constructor() {
+    super("Ritual", new Cost(4), "Empires/Event/");
     this.description =
       "Gain a Curse. If you do, trash a card from your hand. +1 VP per $1 it cost.";
   }
@@ -357,12 +378,14 @@ class Ritual extends Event {
         }.bind(this),
         async function (card) {
           this.chosen += 1;
-          let card_cost = card.cost.getCoin();
+          let card_cost = getCost(card).getCoin();
 
           await getHand().remove_mark();
           await trash_card(card);
-          await getBasicStats().setVictoryToken(getBasicStats().getVictoryToken + card_cost);
-          resolve('Ritual is buyed step 1 finish');
+          await getBasicStats().setVictoryToken(
+            getBasicStats().getVictoryToken + card_cost
+          );
+          resolve("Ritual is buyed step 1 finish");
         }.bind(this),
         "trash"
       );
@@ -371,8 +394,8 @@ class Ritual extends Event {
 }
 
 class Salt_the_Earth extends Event {
-  constructor(player) {
-    super("Salt_the_Earth", new Cost(4), "Empires/Event/", player);
+  constructor() {
+    super("Salt_the_Earth", new Cost(4), "Empires/Event/");
     this.description = "+1 VP Trash a Victory card from the Supply.";
   }
   is_buyed() {
@@ -381,7 +404,11 @@ class Salt_the_Earth extends Event {
       let chosen = 0;
       let is_marked = markSupplyPile(
         function (pile) {
-          return pile.getQuantity() > 0 && pile.getType().includes(Card.Type.VICTORY) && chosen === 0;
+          return (
+            pile.getQuantity() > 0 &&
+            pile.getType().includes(Card.Type.VICTORY) &&
+            chosen === 0
+          );
         },
         async function (pile) {
           chosen += 1;
@@ -402,9 +429,9 @@ class Salt_the_Earth extends Event {
   }
 }
 class Wedding extends Event {
-  constructor(player) {
+  constructor() {
     //Debt
-    super("Wedding", new Cost(4, 3), "Empires/Event/", player);
+    super("Wedding", new Cost(4, 3), "Empires/Event/");
     this.description = "+1 VP Gain a Gold.";
   }
   async is_buyed() {
@@ -413,8 +440,8 @@ class Wedding extends Event {
   }
 }
 class Windfall extends Event {
-  constructor(player) {
-    super("Windfall", new Cost(5), "Empires/Event/", player);
+  constructor() {
+    super("Windfall", new Cost(5), "Empires/Event/");
     this.description = "If your deck and discard pile are empty, gain 3 Golds.";
   }
   async is_buyed() {
@@ -426,8 +453,8 @@ class Windfall extends Event {
   }
 }
 class Conquest extends Event {
-  constructor(player) {
-    super("Conquest", new Cost(6), "Empires/Event/", player);
+  constructor() {
+    super("Conquest", new Cost(6), "Empires/Event/");
     this.description =
       "Gain 2 Silvers. +1 VP per Silver you've gained this turn.";
   }
@@ -441,8 +468,8 @@ class Conquest extends Event {
   }
 }
 class Dominate extends Event {
-  constructor(player) {
-    super("Dominate", new Cost(14), "Empires/Event/", player);
+  constructor() {
+    super("Dominate", new Cost(14), "Empires/Event/");
     this.description = "Gain a Province. If you do, +9 VP.";
   }
   async is_buyed() {

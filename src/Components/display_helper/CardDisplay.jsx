@@ -19,7 +19,7 @@ class CardDisplay extends React.Component{
     showCard(card){
         let isPortrait = card.type.includes(Card.Type.ACTION) || card.type.includes(Card.Type.TREASURE)
                         || card.type.includes(Card.Type.VICTORY) || card.type.includes(Card.Type.DURATION)
-                        || card.type.includes(Card.Type.CURSE);
+                        || card.type.includes(Card.Type.CURSE) || card.type.includes(Card.Type.NIGHT);
         this.setState(prevState => ({
             isVisible: true,
             cardSrc: card.src,

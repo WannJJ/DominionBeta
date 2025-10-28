@@ -1,8 +1,10 @@
 import React from 'react';
 import { RootCard } from '../../../expansions/cards.js';
 import {Card} from './Card.jsx';
-//import { getClassFromName } from '../../../setup.js';
+import { ConfirmationNumber } from '@mui/icons-material';
 
+
+var dragula = require('react-dragula');
 
 const SELECT_TRASH = 'trash',
     SELECT_CHOOSE = 'choose',
@@ -29,7 +31,11 @@ class CardHolder extends React.Component{
             console.error(card);
             throw new Error('INVALID Card');
         }
-        if(this.hasCardId(card.id)) return false;
+        if(this.hasCardId(card.id)) {
+            //TODO
+            console.warn("Card id duplicated", card.id, this.state.cards);
+            return false;
+        };
         return new Promise((resolve) => {
             this.setState(prevState =>({
                 cards: this.arrange([...prevState.cards, card]),
@@ -48,6 +54,8 @@ class CardHolder extends React.Component{
                 this.setState(prevState =>({
                     cards: [...prevState.cards, card],
                 }));
+            } else{
+                console.warn("Card id duplicated", card.id, this.state.cards);
             }
         }
     }
@@ -57,7 +65,10 @@ class CardHolder extends React.Component{
         for(let i=0; i<card_list.length; i++){
             let card = card_list[i];
             if(!(card instanceof RootCard)) throw new Error('INVALID CARD');
-            if(this.hasCardId(card.id)) continue;
+            if(this.hasCardId(card.id)){
+                console.warn("Card id duplicated", card.id, this.state.cards);
+                continue;
+            } 
             addedArray.push(card);
         }
         return new Promise((resolve)=>{
@@ -190,6 +201,10 @@ class CardHolder extends React.Component{
                 onContextMenu={this.onContextMenuFunction.bind(this)}>
                 {card_list}
             </div>
+    }
+    componentDidMount(){
+        var container = document.getElementById(this.id);
+        //var drake = dragula([container]);  
     }
     mark_cards(filterFunc, onClickFunc, selectType=SELECT_CHOOSE, unclick=false){
         if(![SELECT_CHOOSE, SELECT_DISCARD, SELECT_TRASH].includes(selectType)) selectType = SELECT_CHOOSE;

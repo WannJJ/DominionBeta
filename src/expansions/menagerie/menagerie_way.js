@@ -27,7 +27,6 @@ import {
   findSupplyPileAll,
 } from "../../features/TableSide/SupplyPile.jsx";
 import { findNonSupplyPile } from "../../features/TableSide/NonSupplyPile.jsx";
-import { getTextInput } from "../../Components/user_input/TextInput.jsx";
 import {
   draw1,
   drawNCards,
@@ -50,20 +49,17 @@ import {
   REASON_START_CLEANUP,
   REASON_END_TURN,
   REASON_END_GAME,
-  REASON_WHEN_PLAY,
   REASON_WHEN_GAIN,
-  REASON_WHEN_DISCARD,
-  REASON_WHEN_TRASH,
-  REASON_WHEN_BEING_ATTACKED,
-  REASON_WHEN_ANOTHER_GAIN,
   REASON_WHEN_DISCARD_FROM_PLAY,
+  REASON_END_YOUR_TURN,
 } from "../../game_logic/ReactionEffectManager.js";
 import { Card, Cost } from "../cards.js";
 import { setInstruction } from "../../features/PlayerSide/Instruction.jsx";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 /*
 class Way_of_the_ extends Way{
-    constructor(player){
-        super('Way_of_the_', "Menagerie/Way/", player);
+    constructor(){
+        super('Way_of_the_', "Menagerie/Way/");
     }
     play(){
 
@@ -72,8 +68,8 @@ class Way_of_the_ extends Way{
 
 */
 class Way_of_the_Butterfly extends Way {
-  constructor(player) {
-    super("Way_of_the_Butterfly", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Butterfly", "Menagerie/Way/");
   }
   play(card) {
     let pile = findSupplyPile((p) => p.isOriginOf(card));
@@ -96,7 +92,7 @@ class Way_of_the_Butterfly extends Way {
             let removed = await getPlayField().removeCardById(card.id);
             if (removed) {
               await pile.return_card(card);
-              await this.play_step1(card.cost);
+              await this.play_step1(getCost(card));
             }
 
             resolve();
@@ -143,8 +139,8 @@ class Way_of_the_Butterfly extends Way {
   }
 }
 class Way_of_the_Camel extends Way {
-  constructor(player) {
-    super("Way_of_the_Camel", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Camel", "Menagerie/Way/");
   }
   async play() {
     let gold_pile = findSupplyPile(function (pile) {
@@ -160,8 +156,8 @@ class Way_of_the_Camel extends Way {
   }
 }
 class Way_of_the_Chameleon extends Way {
-  constructor(player) {
-    super("Way_of_the_Chameleon", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Chameleon", "Menagerie/Way/");
     this.description =
       "Follow this card's instructions; each time that would give you +Cards this turn, you get +$ instead, and vice-versa.";
   }
@@ -170,8 +166,8 @@ class Way_of_the_Chameleon extends Way {
   }
 }
 class Way_of_the_Frog extends Way {
-  constructor(player) {
-    super("Way_of_the_Frog", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Frog", "Menagerie/Way/");
     this.activate_when_discard_from_play = false;
     this.activate_currently = false;
     this.chosen_id_list = [];
@@ -219,8 +215,8 @@ class Way_of_the_Frog extends Way {
   }
 }
 class Way_of_the_Goat extends Way {
-  constructor(player) {
-    super("Way_of_the_Goat", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Goat", "Menagerie/Way/");
   }
   play() {
     if (getHand().length() <= 0) return;
@@ -244,8 +240,8 @@ class Way_of_the_Goat extends Way {
   }
 }
 class Way_of_the_Horse extends Way {
-  constructor(player) {
-    super("Way_of_the_Horse", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Horse", "Menagerie/Way/");
   }
   async play(card) {
     await drawNCards(2);
@@ -260,8 +256,8 @@ class Way_of_the_Horse extends Way {
   }
 }
 class Way_of_the_Mole extends Way {
-  constructor(player) {
-    super("Way_of_the_Mole", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Mole", "Menagerie/Way/");
   }
   async play() {
     await getBasicStats().addAction(1);
@@ -276,8 +272,8 @@ class Way_of_the_Mole extends Way {
   }
 }
 class Way_of_the_Monkey extends Way {
-  constructor(player) {
-    super("Way_of_the_Monkey", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Monkey", "Menagerie/Way/");
   }
   async play() {
     await getBasicStats().addBuy(1);
@@ -285,8 +281,8 @@ class Way_of_the_Monkey extends Way {
   }
 }
 class Way_of_the_Mouse extends Way {
-  constructor(player) {
-    super("Way_of_the_Mouse", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Mouse", "Menagerie/Way/");
     this.description =
       "Play the set-aside card, leaving it there. Setup: Set aside an unused Action costing $2 or $3.";
   }
@@ -303,8 +299,8 @@ class Way_of_the_Mouse extends Way {
   }
 }
 class Way_of_the_Mule extends Way {
-  constructor(player) {
-    super("Way_of_the_Mule", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Mule", "Menagerie/Way/");
   }
   async play() {
     await getBasicStats().addAction(1);
@@ -312,16 +308,16 @@ class Way_of_the_Mule extends Way {
   }
 }
 class Way_of_the_Otter extends Way {
-  constructor(player) {
-    super("Way_of_the_Otter", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Otter", "Menagerie/Way/");
   }
   async play() {
     await drawNCards(2);
   }
 }
 class Way_of_the_Owl extends Way {
-  constructor(player) {
-    super("Way_of_the_Owl", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Owl", "Menagerie/Way/");
   }
   async play() {
     while (
@@ -333,16 +329,16 @@ class Way_of_the_Owl extends Way {
   }
 }
 class Way_of_the_Ox extends Way {
-  constructor(player) {
-    super("Way_of_the_Ox", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Ox", "Menagerie/Way/");
   }
   async play() {
     await getBasicStats().addAction(2);
   }
 }
 class Way_of_the_Pig extends Way {
-  constructor(player) {
-    super("Way_of_the_Pig", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Pig", "Menagerie/Way/");
   }
   async play() {
     await draw1();
@@ -350,8 +346,8 @@ class Way_of_the_Pig extends Way {
   }
 }
 class Way_of_the_Rat extends Way {
-  constructor(player) {
-    super("Way_of_the_Rat", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Rat", "Menagerie/Way/");
   }
   play(card) {
     if (getHand().length() <= 0) return;
@@ -371,7 +367,9 @@ class Way_of_the_Rat extends Way {
       );
       let is_marked = getHand().mark_cards(
         function (card1) {
-          return card1.type.includes(Card.Type.TREASURE) && this.chosen === 0;
+          return (
+            getType(card1).includes(Card.Type.TREASURE) && this.chosen === 0
+          );
         }.bind(this),
         async function (card1) {
           clearFunc();
@@ -393,8 +391,8 @@ class Way_of_the_Rat extends Way {
   }
 }
 class Way_of_the_Seal extends Way {
-  constructor(player) {
-    super("Way_of_the_Seal", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Seal", "Menagerie/Way/");
     this.activate_when_gain = true;
     this.activate_currently = false;
     this.chosen_id_list = [];
@@ -465,18 +463,19 @@ class Way_of_the_Seal extends Way {
   }
 }
 class Way_of_the_Sheep extends Way {
-  constructor(player) {
-    super("Way_of_the_Sheep", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Sheep", "Menagerie/Way/");
   }
   async play() {
     await getBasicStats().addCoin(2);
   }
 }
 class Way_of_the_Squirrel extends Way {
-  constructor(player) {
-    super("Way_of_the_Squirrel", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Squirrel", "Menagerie/Way/");
     this.turn = -1;
     this.activate_when_end_turn = true;
+    this.activate_when_end_your_turn = true;
     this.activate_currently = false;
     this.chosen_id_list = [];
     this.description = "+2 Cards at the end of this turn.";
@@ -487,7 +486,10 @@ class Way_of_the_Squirrel extends Way {
     this.activate_currently = true;
   }
   should_activate(reason, card) {
-    return reason === REASON_END_TURN && this.chosen_id_list.length > 0;
+    return (
+      (reason === REASON_END_TURN || reason === REASON_END_YOUR_TURN) &&
+      this.chosen_id_list.length > 0
+    );
   }
   async activate(reason, card) {
     await drawNCards(2 * this.chosen_id_list.length);
@@ -496,8 +498,8 @@ class Way_of_the_Squirrel extends Way {
   }
 }
 class Way_of_the_Turtle extends Way {
-  constructor(player) {
-    super("Way_of_the_Turtle", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Turtle", "Menagerie/Way/");
     this.activate_currently = false;
     this.activate_when_start_turn = true;
     this.chosen_id_list = [];
@@ -533,8 +535,8 @@ class Way_of_the_Turtle extends Way {
   }
 }
 class Way_of_the_Worm extends Way {
-  constructor(player) {
-    super("Way_of_the_Worm", "Menagerie/Way/", player);
+  constructor() {
+    super("Way_of_the_Worm", "Menagerie/Way/");
   }
   async play() {
     let estate_pile = findSupplyPile(function (pile) {

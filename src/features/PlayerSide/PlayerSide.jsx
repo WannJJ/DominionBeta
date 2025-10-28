@@ -9,6 +9,7 @@ import { TextInput } from '../../Components/user_input/TextInput.jsx';
 import { NumberPicker } from '../../Components/user_input/NumberPicker.jsx';
 
 import Tooltip from '@mui/material/Tooltip';
+import { Activity } from '../../game_logic/report_save_activity.js';
 
 
 let basicStats = null;
@@ -49,6 +50,7 @@ class BasicStats extends React.Component{
             stateList: '',
         }
         this.ignoreAddActionsThisTurn = false; // Use for SnowyVillage
+        this.addCoinThisTurnIdList = [];
         basicStats = this;
     }
     getAction(){
@@ -113,6 +115,13 @@ class BasicStats extends React.Component{
     });
     }
     addCoin(value){
+        let currentActivity = Activity.current;
+        if(currentActivity && value > 0){
+            if(currentActivity.card) {
+                this.addCoinThisTurnIdList.push(currentActivity.card.id);
+            }
+
+        }
         let newValue = value + this.state.coin;
         if(newValue < 0) newValue = 0;
         return new Promise((resolve) =>{
@@ -234,6 +243,9 @@ class BasicStats extends React.Component{
             resolve,);
         });
     }
+    setNewTurn(){
+        this.addCoinThisTurnIdList = [];
+    }
     setStateList(stateList){
         const result = stateList.map(state => state.name).join(', ');
         this.setState({
@@ -301,9 +313,14 @@ class BasicStats extends React.Component{
         </div>
     }
     createMockObject(){
-        return this.state;
+        return {...this.state,
+            acttil: this.addCoinThisTurnIdList,
+            iaatt: this.ignoreAddActionsThisTurn,
+        };
     }
     parseDataFromMockObject(mockObj){
+        this.addCoinThisTurnIdList = mockObj.acttil;
+        this.ignoreAddActionsThisTurn = mockObj.iaatt;
         return new Promise(resolve =>{
             this.setState(prevState =>(mockObj), resolve);
         });

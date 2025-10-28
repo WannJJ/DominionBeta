@@ -5,6 +5,7 @@ import {
   REASON_START_TURN,
   REASON_END_TURN,
   REASON_WHEN_GAIN,
+  REASON_END_YOUR_TURN,
 } from "../../game_logic/ReactionEffectManager.js";
 
 import {
@@ -37,12 +38,15 @@ import {
   attack_other,
   gainCardByType,
   mayPlayCardFromHand,
+  trashCardList,
+  discardCardList,
 } from "../../game_logic/Activity.js";
+import { getType } from "../../game_logic/basicCardFunctions.js";
 
 /*
 class  extends Event{
-    constructor(player){
-        super('', , "Plunder/Event/", player);
+    constructor(){
+        super('', , "Plunder/Event/");
     }
     is_buyed(){
 
@@ -50,8 +54,8 @@ class  extends Event{
 }
 */
 class Bury extends Event {
-  constructor(player) {
-    super("Bury", new Cost(1), "Plunder/Event/", player);
+  constructor() {
+    super("Bury", new Cost(1), "Plunder/Event/");
   }
   async is_buyed() {
     await getBasicStats().addBuy(1);
@@ -91,8 +95,8 @@ class Bury extends Event {
   }
 }
 class Avoid extends Event {
-  constructor(player) {
-    super("Avoid", new Cost(2), "Plunder/Event/", player);
+  constructor() {
+    super("Avoid", new Cost(2), "Plunder/Event/");
     this.turn = -1;
     this.activate_when_shuffle = true;
     this.activate_currently = false;
@@ -172,9 +176,9 @@ class Avoid extends Event {
   }
 }
 class Deliver extends Event {
-  constructor(player) {
-    super("Deliver", new Cost(2), "Plunder/Event/", player);
-    this.activate_when_end_turn = true;
+  constructor() {
+    super("Deliver", new Cost(2), "Plunder/Event/");
+    this.activate_when_end_your_turn = true;
     this.activate_when_gain = true;
     this.activate_currently = false;
     this.description =
@@ -194,7 +198,7 @@ class Deliver extends Event {
     }
     return (
       (reason === REASON_WHEN_GAIN && card) ||
-      (reason === REASON_END_TURN && this.chosen_id_list.length > 0)
+      (reason === REASON_END_YOUR_TURN && this.chosen_id_list.length > 0)
     );
   }
   async activate(reason, card, activity, cardLocationTrack) {
@@ -217,7 +221,10 @@ class Deliver extends Event {
           this.activate_currently = true;
         }
       }
-    } else if (reason === REASON_END_TURN && this.chosen_id_list.length > 0) {
+    } else if (
+      reason === REASON_END_YOUR_TURN &&
+      this.chosen_id_list.length > 0
+    ) {
       while (this.chosen_id_list.length > 0) {
         let id = this.chosen_id_list.pop();
         let card = await getSetAside().removeCardById(id);
@@ -230,8 +237,8 @@ class Deliver extends Event {
   }
 }
 class Peril extends Event {
-  constructor(player) {
-    super("Peril", new Cost(2), "Plunder/Event/", player);
+  constructor() {
+    super("Peril", new Cost(2), "Plunder/Event/");
   }
   is_buyed() {
     if (getHand().length() <= 0) return;
@@ -255,7 +262,7 @@ class Peril extends Event {
 
       let is_marked = getHand().mark_cards(
         function (card) {
-          return chosen < 1 && card.type.includes("Action");
+          return chosen < 1 && getType(card).includes(Card.Type);
         },
         async function (card) {
           if (chosen === 0) {
@@ -277,8 +284,8 @@ class Peril extends Event {
   }
 }
 class Rush extends Event {
-  constructor(player) {
-    super("Rush", new Cost(2), "Plunder/Event/", player);
+  constructor() {
+    super("Rush", new Cost(2), "Plunder/Event/");
     this.turn = -1;
     this.activate_when_gain = true;
     this.activate_currently = false;
@@ -299,9 +306,8 @@ class Rush extends Event {
       REASON_WHEN_GAIN &&
       this.turn === getPlayer().turn &&
       card &&
-      card.type.includes(Card.Type.ACTION)
+      getType(card).includes(Card.Type.ACTION)
     );
-    //&& getDiscard().has_card(c => c.id === card.id);
   }
   async activate(reason, card, activity, cardLocationTrack) {
     this.activate_currently = false;
@@ -316,8 +322,8 @@ class Rush extends Event {
   }
 }
 class Foray extends Event {
-  constructor(player) {
-    super("Foray", new Cost(3), "Plunder/Event/", player);
+  constructor() {
+    super("Foray", new Cost(3), "Plunder/Event/");
   }
   is_buyed() {
     if (getHand().length() <= 0) return;
@@ -338,10 +344,7 @@ class Foray extends Event {
         async function () {
           clearFunc();
           if (this.card_list.length > 0) {
-            for (let i = 0; i < this.card_list.length; i++) {
-              let card = this.card_list[i];
-              await discard_card(card);
-            }
+            await discardCardList(this.card_list);
           }
           await drawNCards(chosen);
           resolve("Foray finish");
@@ -360,11 +363,11 @@ class Foray extends Event {
             let card_names = [];
             for (let i = 0; i < this.card_list.length; i++) {
               let card = this.card_list[i];
-              await discard_card(card);
               if (!card_names.includes(card.name)) {
                 card_names.push(card.name);
               }
             }
+            await discardCardList(this.card_list);
             if (n === 3 && card_names.length === 3) {
               clearFunc();
               await gainCardByType(Card.Type.LOOT);
@@ -383,8 +386,8 @@ class Foray extends Event {
   }
 }
 class Launch extends Event {
-  constructor(player) {
-    super("Launch", new Cost(3), "Plunder/Event/", player);
+  constructor() {
+    super("Launch", new Cost(3), "Plunder/Event/");
     this.description =
       "Once per turn: Return to your Action phase. +1 Card, +1 Action, and +1 Buy.";
     this.last_turn = -1;
@@ -401,8 +404,8 @@ class Launch extends Event {
   }
 }
 class Mirror extends Event {
-  constructor(player) {
-    super("Mirror", new Cost(3), "Plunder/Event/", player);
+  constructor() {
+    super("Mirror", new Cost(3), "Plunder/Event/");
     this.turn = -1;
     this.activate_when_gain = true;
     this.activate_currently = false;
@@ -422,7 +425,7 @@ class Mirror extends Event {
     return (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.type.includes(Card.Type.ACTION) &&
+      getType(card).includes(Card.Type.ACTION) &&
       this.turn === getPlayer().turn
     );
   }
@@ -434,8 +437,8 @@ class Mirror extends Event {
   }
 }
 class Prepare extends Event {
-  constructor(player) {
-    super("Prepare", new Cost(3), "Plunder/Event/", player);
+  constructor() {
+    super("Prepare", new Cost(3), "Plunder/Event/");
     this.activate_when_start_turn = true;
     this.activate_currently = false;
     this.chosen_id_list = [];
@@ -462,7 +465,10 @@ class Prepare extends Event {
     while (this.chosen_id_list.length > 0) {
       let id = this.chosen_id_list.pop();
       let card = await getSetAside().removeCardById(id);
-      if (card.type.includes("Action") || card.type.includes("Treasure")) {
+      if (
+        getType(card).includes(Card.Type.ACTION) ||
+        getType(card).includes(Card.Type.TREASURE)
+      ) {
         card_list.push(card);
       } else {
         await discard_card(card, false);
@@ -496,8 +502,8 @@ class Prepare extends Event {
   }
 }
 class Scrounge extends Event {
-  constructor(player) {
-    super("Scrounge", new Cost(3), "Plunder/Event/", player);
+  constructor() {
+    super("Scrounge", new Cost(3), "Plunder/Event/");
     this.description =
       "Choose one: Trash a card from your hand; or gain an Estate from the trash, and if you did, gain a card costing up to $5.";
   }
@@ -568,8 +574,8 @@ class Scrounge extends Event {
   }
 }
 class Journey extends Event {
-  constructor(player) {
-    super("Journey", new Cost(4), "Plunder/Event/", player);
+  constructor() {
+    super("Journey", new Cost(4), "Plunder/Event/");
     this.description =
       "You don't discard cards from play in Clean-up this turn. Take an extra turn after this one (but not a 3rd turn in a row).";
   }
@@ -578,8 +584,8 @@ class Journey extends Event {
   }
 }
 class Maelstrom extends Event {
-  constructor(player) {
-    super("Maelstrom", new Cost(4), "Plunder/Event/", player);
+  constructor() {
+    super("Maelstrom", new Cost(4), "Plunder/Event/");
     this.description =
       "Trash 3 cards from your hand. Each other player with 5 or more cards in hand trashes one of them.";
   }
@@ -601,9 +607,7 @@ class Maelstrom extends Event {
           }
           if (chosen === n) {
             getHand().remove_mark();
-            for (let card of cardList) {
-              await trash_card(card);
-            }
+            await trashCardList(cardList);
             await this.attack();
 
             resolve("Maelstrom finish");
@@ -642,16 +646,16 @@ class Maelstrom extends Event {
   }
 }
 class Looting extends Event {
-  constructor(player) {
-    super("Looting", new Cost(6), "Plunder/Event/", player);
+  constructor() {
+    super("Looting", new Cost(6), "Plunder/Event/");
   }
   async is_buyed() {
     await gainCardByType(Card.Type.LOOT);
   }
 }
 class Invasion extends Event {
-  constructor(player) {
-    super("Invasion", new Cost(10), "Plunder/Event/", player);
+  constructor() {
+    super("Invasion", new Cost(10), "Plunder/Event/");
   }
   async is_buyed() {
     await this.play_step1();
@@ -677,7 +681,7 @@ class Invasion extends Event {
       setInstruction("Invasion: You may play an Attack from your hand.");
 
       let mayPlayAttack = mayPlayCardFromHand(
-        (card) => card.type.includes(Card.Type.ATTACK),
+        (card) => getType(card).includes(Card.Type.ATTACK),
         async function (card) {
           clearFunc();
           await play_card(card);
@@ -689,16 +693,6 @@ class Invasion extends Event {
         clearFunc();
         resolve("Invasion step 1 finish");
       }
-
-      /*
-            getHand().mark_cards(card => card.type.includes('Attack'), async function(card){
-                clearFunc();
-                await getHand().remove(card);
-                await play_card(card, true);
-                
-                resolve('Invasion step 1 finish');
-            });
-            */
 
       getButtonPanel().add_button("Don't play", async function () {
         clearFunc();
@@ -724,8 +718,8 @@ class Invasion extends Event {
   }
 }
 class Prosper extends Event {
-  constructor(player) {
-    super("Prosper", new Cost(10), "Plunder/Event/", player);
+  constructor() {
+    super("Prosper", new Cost(10), "Plunder/Event/");
   }
   async is_buyed() {
     await gainCardByType(Card.Type.LOOT);

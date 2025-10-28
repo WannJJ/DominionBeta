@@ -3,6 +3,7 @@ import { getClassFromName } from '../../setup';
 import { RootCard } from '../../expansions/cards';
 import { showCard } from '../../Components/display_helper/CardDisplay';
 import { cancelShowCardList, showCardList } from '../../Components/display_helper/DeckDisplay';
+import { getCost, getType } from '../../game_logic/basicCardFunctions';
 
 const ignoreActivateCondition = true;
 
@@ -31,6 +32,7 @@ class Pile extends React.Component{
             name: name,
             card_list: card_list,
             canSelect: true,
+            debt_token: 0,
         }   
         this.originalCardNames = new Set(card_list.map(card => card.name));
         this.representCard = card_list[card_list.length - 1];
@@ -64,12 +66,27 @@ class Pile extends React.Component{
     getCost(){
         let topCard = this.getNextCard();
         if(!topCard) return undefined;
-        return topCard.cost;
+
+        return getCost(topCard);
     }
     getType(){
         let topCard = this.getNextCard();
         if(!topCard) return [];
-        return topCard.type;
+        return getType(topCard)
+    }
+    setDebtToken(value){
+        return new Promise((resolve) =>{
+            this.setState(
+                prevState => ({
+                    debt_token: value,
+                }),
+                resolve
+            );
+        })
+        
+    }
+    getDebtToken(){
+        return this.state.debt_token;
     }
     getCardAll(){
         return this.state.card_list;
@@ -142,6 +159,7 @@ class Pile extends React.Component{
         return {
             name: this.state.name,
             card_list: this.state.card_list.map(c => c.createMockObject(ignoreActivateCondition)),
+            debt_token: this.state.debt_token,
         };
     }
     parseDataFromMockObject(mockObj){
@@ -157,7 +175,8 @@ class Pile extends React.Component{
                     let new_card = new new_card_class();
                     new_card.parseDataFromMockObject(mockCard, ignoreActivateCondition);
                     return new_card;
-                })
+                }),
+                debt_token: mockObj.debt_token,
             }),
             resolve);
         });

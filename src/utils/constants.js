@@ -42,4 +42,6 @@ export const ACTIVITY_PLAY = "Play",
   ACTIVITY_SET_ASIDE = "Set aside",
   ACTIVITY_PLAY_AS_WAY = "Play as Way",
   ACTIVITY_OTHER_REACT_GAIN = "Let other react when gain",
+  ACTIVITY_OTHER_REACT_PLAY = "Let other react when play",
+  ACTIVITY_OTHER_REACT_END_TURN = "Let other react when end turn",
   ACTIVITY_MESSAGE_OTHER = "Message";

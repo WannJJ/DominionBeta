@@ -9,6 +9,7 @@ import { showCardList, cancelShowCardList } from '../../../Components/display_he
 let discard = null,
     deck = null,
     trash = null;
+let cardBackSrc = './img/Basic/Back.JPG';
 
 class CardPile extends React.Component{
     constructor(props, id='', src=''){
@@ -20,13 +21,17 @@ class CardPile extends React.Component{
             cards: [],
             canBeSelected: false,
         };
-        this.onClickFunction = null;// function(){console.log('hallo')};
+        this.onClickFunction = null;
     }
     addCard(card){
         if(!(card instanceof RootCard)){
             throw new Error('INVALID Card');
         }
-        if(this.hasCardId(card.id)) return false;
+        if(this.hasCardId(card.id)) {
+            //TODO
+            console.warn("Card id duplicated", this.state.id, card.name, card.id, this.state.cards.map(c => [c.name, c.id]));
+            return false;
+        }
         return new Promise((resolve) =>{
             this.setState(prevState =>({
                     cards: [...prevState.cards, card],
@@ -52,16 +57,19 @@ class CardPile extends React.Component{
                     resolve);
                 })
                 
-            }
+            } else console.warn("Card id duplicated", this.state.id, card.name, card.id, this.state.cards.map(c => [c.name, c.id]));
         }
     }
     addCardList(card_list){
-        if(!Array.isArray(card_list)) alert('INVALID CARD LIST');
+        if(!Array.isArray(card_list)) alert('INVALID CARD LIST: Expect an Array');
         let addedArray = [];
         for(let i=0; i<card_list.length; i++){
             let card = card_list[i];
-            if(!(card instanceof RootCard)) throw new Error('INVALID CARD');
-            if(this.hasCardId(card.id)) continue;
+            if(!(card instanceof RootCard)) throw new Error('INVALID CARD: Expect an instance of RootCard');
+            if(this.hasCardId(card.id)) {
+                console.warn("Card id duplicated", this.state.id, card.id, this.state.cards.map(c => [c.name, c.id]));
+                continue;
+            }
             addedArray.push(card);
         }
         return new Promise((resolve) =>{
@@ -138,7 +146,7 @@ class CardPile extends React.Component{
         return this.state.cards;
     }
     setCardAll(card_list){
-        if(!Array.isArray(card_list)) return;
+        if(!Array.isArray(card_list)) throw new Error();
         return new Promise((resolve) =>{
             this.setState(prevState => ({
                     cards: card_list,
@@ -262,9 +270,15 @@ class Deck extends CardPile{
     }
     static getDerivedStateFromProps(props, state) {
         let len = state.cards.length;
+        let backSrc = '';
+        if(len > 0){
+            let topCard = state.cards[len -1];
+            backSrc = topCard.getCardBack();
+        }
         return {
             id: 'deck',
-            src: len>0?'./img/Basic/Back.JPG':'',
+            src: backSrc,
+            //src: len>0?'./img/Basic/Back.JPG':'',
             cards: state.cards,
         };
     }
@@ -284,7 +298,7 @@ class Deck extends CardPile{
             );
         })
     }
-    shuffleDeck(){ //use for Famine, Annex, Donate
+    shuffleDeck(){ //use for Famine, Annex, Donate,
         throw new Error('Khong dung shuffle deck nua');
         let cardList = this.state.cards;
         if(cardList.length === 0) return;

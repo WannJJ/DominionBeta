@@ -9,6 +9,7 @@ import {
   Province,
   Colony,
 } from "./expansions/basic_card.js";
+
 import {
   Chapel,
   Cellar,
@@ -220,6 +221,23 @@ import {
   Sword,
 } from "./expansions/plunder/plunder_loot.js";
 import {
+  Cheap,
+  Cursed,
+  Fated,
+  Fawning,
+  Friendly,
+  Hasty,
+  Inherited,
+  Inspiring,
+  Nearby,
+  Patient,
+  Pious,
+  Reckless,
+  Rich,
+  Shy,
+  Tireless,
+} from "./expansions/plunder/plunder_trait.js";
+import {
   CandlestickMaker,
   Stonemason,
   Doctor,
@@ -391,6 +409,35 @@ import {
   Tanuki,
   TeaHouse,
 } from "./expansions/rising_sun/rising_sun.js";
+import {
+  Continue,
+  Amass,
+  Asceticism,
+  Credit,
+  Foresight,
+  Kintsugi,
+  Practice,
+  SeaTrade,
+  ReceiveTribute,
+  Gather,
+} from "./expansions/rising_sun/rising_sun_event.js";
+import {
+  ApproachingArmy,
+  BidingTime,
+  Bureaucracy,
+  DivineWind,
+  Enlightenment,
+  FlourishingTrade,
+  GoodHarvest,
+  GreatLeader,
+  Growth,
+  HarshWinter,
+  KindEmperor,
+  Panic,
+  Progress,
+  RapidExpansion,
+  Sickness,
+} from "./expansions/rising_sun/rising_sun_prophecy.js";
 import {
   CityQuarter,
   Engineer,
@@ -721,6 +768,23 @@ const basic = [
     Invasion,
     Prosper,
   ],
+  plunder_trait = [
+    Cheap,
+    Cursed,
+    Fated,
+    Fawning,
+    Friendly,
+    Hasty,
+    Inherited,
+    Inspiring,
+    Nearby,
+    Patient,
+    Pious,
+    Reckless,
+    Rich,
+    Shy,
+    Tireless,
+  ],
   loot = [
     Amphora,
     Doubloons,
@@ -868,6 +932,35 @@ const basic = [
     SnakeWitch,
     Tanuki,
     TeaHouse,
+  ],
+  rising_sun_events = [
+    Continue,
+    Amass,
+    Asceticism,
+    Credit,
+    Foresight,
+    Kintsugi,
+    Practice,
+    SeaTrade,
+    ReceiveTribute,
+    Gather,
+  ],
+  rising_sun_prophecy = [
+    ApproachingArmy,
+    BidingTime,
+    Bureaucracy,
+    DivineWind,
+    Enlightenment,
+    FlourishingTrade,
+    GoodHarvest,
+    GreatLeader,
+    Growth,
+    HarshWinter,
+    KindEmperor,
+    Panic,
+    Progress,
+    RapidExpansion,
+    Sickness,
   ];
 //expansion_list = [base, seaside, menagerie, plunder, guilds, nocturne, rising_sun];
 
@@ -883,6 +976,7 @@ all_cards.push(...empires_landmarks);
 all_cards.push(...empires_events);
 all_cards.push(...plunder);
 all_cards.push(...plunder_events);
+all_cards.push(...plunder_trait);
 all_cards.push(...loot);
 all_cards.push(...non_supply);
 all_cards.push(...guilds);
@@ -892,9 +986,8 @@ all_cards.push(...nocturne_heirloom);
 all_cards.push(...nocturne_hex_boon);
 all_cards.push(...nocturne_state);
 all_cards.push(...rising_sun);
-/*
-all_cards.push(...nocturne_non_supply);
-*/
+all_cards.push(...rising_sun_events);
+all_cards.push(...rising_sun_prophecy);
 
 let all_kingdom_cards = [];
 all_kingdom_cards.push(...base);
@@ -912,8 +1005,10 @@ all_events.push(...menagerie_ways);
 all_events.push(...empires_landmarks);
 all_events.push(...empires_events);
 all_events.push(...plunder_events);
+all_events.push(...rising_sun_events);
+all_events.push(...rising_sun_prophecy);
 
-let not_finish = [Way_of_the_Chameleon, Journey, Mountain_Pass];
+let not_finish = [Way_of_the_Chameleon, Journey, Seize_the_Day, DivineWind];
 
 class SetupEngine {
   setup() {}
@@ -945,25 +1040,21 @@ class SetupEngine {
   }
   async set_starting_deck(player, heirloom_class_list) {
     this.starting_deck_class_list = [
-      //Copper, Copper, Copper,
+      //Copper,      Copper,      Copper,
       //Copper, Copper, Copper, Copper,
       //Hovel, Necropolis, OvergrownEstate,
       //Estate, Estate, Estate,
-      Silver,
-      Gold,
-      //
       /*
             Sentry
             Festival, Festival,
             
-            CouncilRoom, 
             Militia, BlackCat,
             */
       Festival,
       Festival,
+      Laboratory,
       Platinum,
       Platinum,
-      //Trickster,Capital, SacredGrove,
     ];
     player.all_cards = [];
     for (let clss of this.starting_deck_class_list) {
@@ -1023,12 +1114,12 @@ class SetupEngine {
       await getBasicSupply().setup(player);
       await getKingdomSupply().setup(player);
 
-      await landscapeEffectManager.setup();
-      //TODO: nen de set non supply list o day; setup cho non supply pile
-
       let heirloom_class_list =
         this.get_replacing_heirloom_class_list(player_kingdom);
       await this.set_starting_deck(player, heirloom_class_list);
+
+      await landscapeEffectManager.setup();
+      //TODO: nen de set non supply list o day; setup cho non supply pile
     }
   }
 }
@@ -1040,7 +1131,7 @@ const classMap = all_cards.reduce((acc, cls) => {
 const classNameMap = all_cards.reduce((acc, cls) => {
   acc[cls] = new cls().name;
   return acc;
-});
+}, {});
 
 function getClassName(clss) {
   let name = undefined;
@@ -1073,8 +1164,10 @@ function getClassFromName(class_name) {
   alert("CANT FIND THIS CLASS");
   return undefined;
 }
+
 function getAllCards() {
-  return all_cards.map((c) => c);
+  return all_cards;
+  //return all_cards.map((c) => c);
 }
 
 export { SetupEngine, getClassFromName, getClassName, getAllCards };

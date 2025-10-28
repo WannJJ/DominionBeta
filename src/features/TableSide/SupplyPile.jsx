@@ -1,7 +1,8 @@
 import React from 'react';
 import {Pile} from './Pile.jsx';
-import { showCard } from '../../Components/display_helper/CardDisplay.jsx';
-import { cancelShowCardList, showCardList } from '../../Components/display_helper/DeckDisplay.jsx';
+import { RootCard } from '../../expansions/cards.js';
+import { generateCardFromMockObject } from '../../game_logic/GameState.js';
+import { getCost } from '../../game_logic/basicCardFunctions.js';
 
 let supplyPileList = [];
 const ignoreActivateCondition = true;
@@ -17,19 +18,19 @@ class SupplyPile extends Pile{
         if(splitPile.includes(card.name)){
             let cardList = card.createSplitPile();
             super(props, null, cardList.length, cardList, card.name);
-            //this.isSplitPile = true;
         } else{
             super(props, cardClass, quantity);
-            //this.isSplitPile = false;
         }
         
+
         this.state = {
-            name: this.state.name,
-            card_list: this.state.card_list,
-            canSelect: true,
+            ...this.state,
             victory_token: 0,
-            debt_token: 0,
+            trait_card: null,
         }
+
+        
+
         addSupplyPile(this);
     }
     setVictoryToken(value){
@@ -46,49 +47,39 @@ class SupplyPile extends Pile{
     getVictoryToken(){
         return this.state.victory_token;
     }
-    setDebtToken(value){
-        return new Promise((resolve) =>{
-            this.setState(
-                prevState => ({
-                    debt_token: value,
-                }),
-                resolve
-            );
-        })
-        
-    }
-    getDebtToken(){
-        return this.state.debt_token;
-    }
+   
     toggleSelect(){
         this.popNextCard();
         this.setState(prevState => ({
             canSelect: !prevState.canSelect,
         }));
     }
+    setTraitCard(card){
+        if(!card || !(card instanceof RootCard)) throw new Error();
+        return new Promise(resolve =>{
+            this.setState(
+                prevState => ({
+                    trait_card: card,
+                }),
+                resolve
+            );
+        })
+    }
+    getTraitCard(){
+        return this.state.trait_card;
+    }
     onContextMenuEvent(e){
         e.preventDefault();
         this.showCardList();
-        /*
-        let topCard = this.getNextCard();
-        if(!topCard) topCard = new this.props.cardClass();
-        if(this.isSplitPile){
-            showCardList(this.state.card_list);
-            window.onclick = function(){
-                cancelShowCardList();
-                window.onclick = null;
-            }
-        } else{
-            showCard(topCard);
-        }
-            */
         
     }
     render(){
         let topCard = this.getNextCard();
         if(!topCard) topCard = new this.props.cardClass();
         let src = topCard.src,
-            quantity = this.getQuantity();
+            quantity = this.getQuantity(),
+            cost = getCost(topCard);
+            //cost = topCard.getCost();
         
         let canSelect = false,
             onClickFunction = null;
@@ -113,8 +104,14 @@ class SupplyPile extends Pile{
                         && <div className='debt-token'>{this.state.debt_token}</div>}
                     {quantity === 0 
                         && <div className='empty' />}
-                    <Cost coin={topCard.cost.coin} debt={topCard.cost.debt} potion={topCard.cost.potion}/>
+                    <Cost coin={cost.coin} debt={cost.debt} potion={cost.potion }/>
                     <Quantity value={quantity}/>
+                    {this.state.trait_card
+                        && <div className="trait"
+                        style={{backgroundImage: `url(${this.state.trait_card.src})`}}>
+                    </div>
+                    }
+                    
         </div>
     }
     createMockObject(){
@@ -122,7 +119,8 @@ class SupplyPile extends Pile{
             name: this.state.name,
             card_list: this.state.card_list.map(c => c.createMockObject(ignoreActivateCondition)),
             victory_token: this.state.victory_token,
-            debt_token: this.state.debt_token
+            debt_token: this.state.debt_token,
+            trait_card: this.state.trait_card?this.state.trait_card.createMockObject(): null,
         };
     }
     async parseDataFromMockObject(mockObj){
@@ -130,7 +128,8 @@ class SupplyPile extends Pile{
         return new Promise((resolve) =>{
             this.setState(prevState =>({
                 victory_token: mockObj.victory_token,
-                debt_token: mockObj.debt_token
+                debt_token: mockObj.debt_token,
+                trait_card: mockObj.trait_card?generateCardFromMockObject(mockObj.trait_card): null,
             }),
             resolve);
         });

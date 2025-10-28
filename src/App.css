@@ -10,3 +10,15 @@ html, body {
     
     opacity: 1;
 }
+
+::-webkit-scrollbar {
+width: 5px;
+}
+::-webkit-scrollbar-track {
+border: 1px solid yellowgreen;
+border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+background: yellowgreen;
+border-radius: 10px;
+}

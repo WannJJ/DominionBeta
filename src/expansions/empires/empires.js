@@ -15,6 +15,8 @@ import {
   attack_other,
   mayPlayCardFromHand,
   message_other,
+  trashCardList,
+  discardCardList,
 } from "../../game_logic/Activity.js";
 import {
   findSupplyPile,
@@ -40,6 +42,8 @@ import {
   REASON_START_CLEANUP,
   effectBuffer,
   REASON_WHEN_DISCARD_FROM_PLAY,
+  REASON_WHEN_PLAY,
+  REASON_WHEN_TRASH,
 } from "../../game_logic/ReactionEffectManager.js";
 import {
   getPlayArea,
@@ -54,10 +58,12 @@ import {
 import { opponentManager } from "../../features/OpponentSide/Opponent.js";
 import { getSupportHand } from "../../features/SupportHand.jsx";
 import { getClassFromName } from "../../setup.js";
+import { getGameState } from "../../game_logic/GameState.js";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 /*
 class  extends Card{
-    constructor(player){
-        super("", new Cost(), `${Card.Type.ACTION}`, "Empires/", player);
+    constructor(){
+        super("", new Cost(), `${Card.Type.ACTION}`, "Empires/", );
     }
     async play(){
         
@@ -66,15 +72,15 @@ class  extends Card{
 */
 
 class CityQuarter extends Card {
-  constructor(player) {
-    super("CityQuarter", new Cost(0, 8), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("CityQuarter", new Cost(0, 8), Card.Type.ACTION, "Empires/");
   }
   async play() {
     await getBasicStats().addAction(2);
     await revealCardList(getHand().getCardAll());
     let actionCount = 0;
     for (let card of getHand().getCardAll()) {
-      if (card.type.includes(Card.Type.ACTION)) {
+      if (getType(card).includes(Card.Type.ACTION)) {
         actionCount += 1;
       }
     }
@@ -83,8 +89,8 @@ class CityQuarter extends Card {
   }
 }
 class Engineer extends Card {
-  constructor(player) {
-    super("Engineer", new Cost(0, 4), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Engineer", new Cost(0, 4), Card.Type.ACTION, "Empires/");
   }
   async play() {
     await this.play_step1();
@@ -137,13 +143,12 @@ class Engineer extends Card {
 }
 
 class Overlord extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Overlord",
       new Cost(0, 8),
       `${Card.Type.ACTION} ${Card.Type.COMMAND}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   play() {
@@ -174,14 +179,8 @@ class Overlord extends Card {
 }
 
 class RoyalBlacksmith extends Card {
-  constructor(player) {
-    super(
-      "RoyalBlacksmith",
-      new Cost(0, 8),
-      Card.Type.ACTION,
-      "Empires/",
-      player
-    );
+  constructor() {
+    super("RoyalBlacksmith", new Cost(0, 8), Card.Type.ACTION, "Empires/");
   }
   async play() {
     await drawNCards(5);
@@ -192,8 +191,8 @@ class RoyalBlacksmith extends Card {
         copperList.push(card);
       }
     }
-    for (let copper of copperList) {
-      await discard_card(copper, true);
+    if (copperList.length > 0) {
+      await discardCardList(copperList);
     }
   }
 }
@@ -285,8 +284,8 @@ class Encampment extends Card {
 }
 
 class Plunder extends Card {
-  constructor(player) {
-    super("Plunder", new Cost(5), Card.Type.TREASURE, "Empires/", player);
+  constructor() {
+    super("Plunder", new Cost(5), Card.Type.TREASURE, "Empires/");
   }
   async play() {
     await getBasicStats().addCoin(2);
@@ -296,8 +295,8 @@ class Plunder extends Card {
 
 //Split
 class Patrician extends Card {
-  constructor(player) {
-    super("Patrician", new Cost(2), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Patrician", new Cost(2), Card.Type.ACTION, "Empires/");
   }
   createSplitPile() {
     return [
@@ -321,7 +320,7 @@ class Patrician extends Card {
     if (card) {
       await reveal_card(card);
       let cost = new Cost(5);
-      if (card.cost.isGreaterOrEqual(cost)) {
+      if (getCost(card).isGreaterOrEqual(cost)) {
         await getDeck().pop();
         await getHand().addCard(card);
       }
@@ -330,8 +329,8 @@ class Patrician extends Card {
 }
 
 class Emporium extends Card {
-  constructor(player) {
-    super("Emporium", new Cost(5), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Emporium", new Cost(5), Card.Type.ACTION, "Empires/");
   }
   async play() {
     await draw1();
@@ -341,7 +340,7 @@ class Emporium extends Card {
   async is_gained() {
     let actionCount = 0;
     for (let card of getPlayField().getCardAll()) {
-      if (card.type.includes(Card.Type.ACTION)) {
+      if (getType(card).includes(Card.Type.ACTION)) {
         actionCount += 1;
       }
     }
@@ -353,8 +352,8 @@ class Emporium extends Card {
 
 //Split
 class Settlers extends Card {
-  constructor(player) {
-    super("Settlers", new Cost(2), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Settlers", new Cost(2), Card.Type.ACTION, "Empires/");
   }
   createSplitPile() {
     return [
@@ -412,8 +411,8 @@ class Settlers extends Card {
 }
 
 class BustlingVillage extends Card {
-  constructor(player) {
-    super("BustlingVillage", new Cost(5), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("BustlingVillage", new Cost(5), Card.Type.ACTION, "Empires/");
   }
   async play() {
     await draw1();
@@ -459,13 +458,12 @@ class BustlingVillage extends Card {
 
 //Split
 class Catapult extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Catapult",
       new Cost(3),
       `${Card.Type.ACTION} ${Card.Type.ATTACK}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   createSplitPile() {
@@ -501,10 +499,10 @@ class Catapult extends Card {
           await trash_card(card);
 
           let cost = new Cost(3);
-          if (card.cost.isGreaterOrEqual(cost)) {
+          if (getCost(card).isGreaterOrEqual(cost)) {
             await this.attack("Type 1");
           }
-          if (card.type.includes(Card.Type.TREASURE)) {
+          if (getType(card).includes(Card.Type.TREASURE)) {
             await this.attack("Type 2");
           }
           resolve();
@@ -544,9 +542,7 @@ class Catapult extends Card {
         async function () {
           if (this.chosen < n) return;
           clearFunc();
-          for (let card of discardList) {
-            await discard_card(card);
-          }
+          await discardCardList(discardList);
           resolve("catapult finish");
         }.bind(this)
       );
@@ -567,16 +563,14 @@ class Catapult extends Card {
 }
 
 class Rocks extends Card {
-  constructor(player) {
-    super("Rocks", new Cost(4), Card.Type.TREASURE, "Empires/", player);
+  constructor() {
+    super("Rocks", new Cost(4), Card.Type.TREASURE, "Empires/");
+    this.activate_when_trash = true;
   }
   async play() {
     await getBasicStats().addCoin(1);
   }
   async is_gained() {
-    await this.is_gained_step1();
-  }
-  async is_trashed() {
     await this.is_gained_step1();
   }
   async is_gained_step1() {
@@ -586,6 +580,12 @@ class Rocks extends Card {
       let silver = await gain_card_name("Silver", getHand());
     }
   }
+  should_activate(reason, card) {
+    return reason === REASON_WHEN_TRASH && card && card.id === this.id;
+  }
+  async activate(reason, card) {
+    await this.is_gained_step1();
+  }
 }
 
 class ChariotRace extends Card {
@@ -594,8 +594,8 @@ class ChariotRace extends Card {
     LESS: "LESS",
     NOT: "NOT",
   };
-  constructor(player) {
-    super("ChariotRace", new Cost(3), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("ChariotRace", new Cost(3), Card.Type.ACTION, "Empires/");
     this.description =
       "Reveal the top card of your deck and put it into your hand. The player to your left reveals the top card of their deck. If your card costs more, +$1 and +1 VP.";
   }
@@ -629,7 +629,7 @@ class ChariotRace extends Card {
     if (!topCard) return ChariotRace.MESSAGE.NOT;
     await reveal_card(topCard);
 
-    if (opponentCard.cost.isGreaterThan(topCard.cost)) {
+    if (getCost(opponentCard).isGreaterThan(getCost(topCard))) {
       return ChariotRace.MESSAGE.MORE;
     }
     return ChariotRace.MESSAGE.LESS;
@@ -637,17 +637,18 @@ class ChariotRace extends Card {
 }
 
 class Enchantress extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Enchantress",
       new Cost(3),
       `${Card.Type.ACTION} ${Card.Type.ATTACK} ${Card.Type.DURATION}`,
-      "Empires/",
-      player
+      "Empires/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
+
+    this.activate_when_play = false;
     this.turn = -1;
   }
   async play() {
@@ -659,27 +660,49 @@ class Enchantress extends Card {
     await attack_other(this);
   }
   is_attacked() {
-    getPlayer().is_attacked_by_enchantress = true;
+    effectBuffer.addCard(this);
+    this.activate_when_play = true;
+    this.turn = getPlayer().turn;
   }
 
-  should_activate(reason) {
-    return reason === REASON_START_TURN;
+  should_activate(reason, card) {
+    if (reason === REASON_START_TURN) return true;
+    if (reason !== REASON_WHEN_PLAY) return false;
+    if (this.turn + 1 < getPlayer().turn) {
+      effectBuffer.removeCardById(this.id);
+      this.activate_when_play = false;
+      return false;
+    }
+
+    return (
+      card &&
+      getType(card).includes(Card.Type.ACTION) &&
+      getGameState().cards_played_this_turn.filter((card0) =>
+        getType(card0).includes(Card.Type.ACTION)
+      ).length === 1
+    );
   }
-  async activate() {
-    await drawNCards(2);
-    this.not_discard_in_cleanup = false;
-    this.activate_when_start_turn = false;
+  async activate(reason, card) {
+    if (reason === REASON_START_TURN) {
+      await drawNCards(2);
+      this.not_discard_in_cleanup = false;
+      this.activate_when_start_turn = false;
+    } else if (reason === REASON_WHEN_PLAY) {
+      effectBuffer.removeCardById(this.id);
+      this.activate_when_play = false;
+      await draw1();
+      await getBasicStats().addAction(1);
+    }
   }
 }
 
 class FarmersMarket extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "FarmersMarket",
       new Cost(3),
       `${Card.Type.ACTION} ${Card.Type.GATHERING}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   async play() {
@@ -704,8 +727,8 @@ class FarmersMarket extends Card {
 
 //Split
 class Gladiator extends Card {
-  constructor(player) {
-    super("Gladiator", new Cost(3), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Gladiator", new Cost(3), Card.Type.ACTION, "Empires/");
   }
   createSplitPile() {
     return [
@@ -804,8 +827,8 @@ class Gladiator extends Card {
   }
 }
 class Fortune extends Card {
-  constructor(player) {
-    super("Fortune", new Cost(8, 8), Card.Type.TREASURE, "Empires/", player);
+  constructor() {
+    super("Fortune", new Cost(8, 8), Card.Type.TREASURE, "Empires/");
     this.turn = -1;
   }
   async play() {
@@ -837,8 +860,8 @@ class Fortune extends Card {
 }
 
 class Sacrifice extends Card {
-  constructor(player) {
-    super("Sacrifice", new Cost(4), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Sacrifice", new Cost(4), Card.Type.ACTION, "Empires/");
   }
   play() {
     if (getHand().getLength() <= 0) return;
@@ -853,14 +876,14 @@ class Sacrifice extends Card {
           chosen = 1;
           getHand().remove_mark();
           await trash_card(card);
-          if (card.type.includes(Card.Type.ACTION)) {
+          if (getType(card).includes(Card.Type.ACTION)) {
             await drawNCards(2);
             await getBasicStats().addAction(2);
           }
-          if (card.type.includes(Card.Type.TREASURE)) {
+          if (getType(card).includes(Card.Type.TREASURE)) {
             await getBasicStats().addCoin(2);
           }
-          if (card.type.includes(Card.Type.VICTORY)) {
+          if (getType(card).includes(Card.Type.VICTORY)) {
             await getBasicStats().addVictoryToken(2);
           }
           resolve();
@@ -872,13 +895,12 @@ class Sacrifice extends Card {
 }
 
 class Temple extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Temple",
       new Cost(4),
       `${Card.Type.ACTION} ${Card.Type.GATHERING}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   async play() {
@@ -907,10 +929,7 @@ class Temple extends Card {
       getButtonPanel().add_button("OK", async function () {
         if (trashList.length <= 0 || trashList.length > 3) return;
         clearFunc();
-        for (let card of trashList) {
-          await trash_card(card, true);
-        }
-
+        await trashCardList(trashList);
         resolve();
       });
 
@@ -935,8 +954,8 @@ class Temple extends Card {
   }
 }
 class Villa extends Card {
-  constructor(player) {
-    super("Villa", new Cost(4), Card.Type.ACTION, "Empires/", player);
+  constructor() {
+    super("Villa", new Cost(4), Card.Type.ACTION, "Empires/");
     this.activate_when_gain = false;
   }
   async play() {
@@ -972,13 +991,12 @@ class Villa extends Card {
 }
 
 class Archive extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Archive",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.DURATION}`,
-      "Empires/",
-      player
+      "Empires/"
     );
     this.activate_when_in_play = false;
     this.activate_when_start_turn = true;
@@ -1072,8 +1090,8 @@ class Archive extends Card {
 }
 
 class Capital extends Card {
-  constructor(player) {
-    super("Capital", new Cost(5), Card.Type.TREASURE, "Empires/", player);
+  constructor() {
+    super("Capital", new Cost(5), Card.Type.TREASURE, "Empires/");
     this.activate_when_in_play = false;
     this.activate_when_discard_from_play = false;
   }
@@ -1097,8 +1115,8 @@ class Capital extends Card {
 }
 
 class Charm extends Card {
-  constructor(player) {
-    super("Charm", new Cost(5), `${Card.Type.TREASURE}`, "Empires/", player);
+  constructor() {
+    super("Charm", new Cost(5), `${Card.Type.TREASURE}`, "Empires/");
     this.activate_when_gain = true;
     this.activate_when_in_play = true;
     this.turn = -1;
@@ -1155,7 +1173,8 @@ class Charm extends Card {
       let pileFound = markSupplyPile(
         function (pile) {
           return (
-            pile.getName() !== card.name && pile.getCost().isEqual(card.cost)
+            pile.getName() !== card.name &&
+            pile.getCost().isEqual(getCost(card))
           );
         },
         async function (pile) {
@@ -1173,13 +1192,12 @@ class Charm extends Card {
   }
 }
 class Crown extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Crown",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.TREASURE}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   async play() {
@@ -1213,7 +1231,7 @@ class Crown extends Card {
 
       let mayPlayAction = mayPlayCardFromHand(
         function (card) {
-          return this.chosen === 0 && card.type.includes("Action");
+          return this.chosen === 0 && getType(card).includes(Card.Type.ACTION);
         }.bind(this),
         async function (card) {
           if (this.chosen === 0) {
@@ -1236,30 +1254,6 @@ class Crown extends Card {
         clearFunc();
         resolve("no action");
       }
-
-      /*
-            let contain_action = getHand().mark_cards(
-                function(card){return this.chosen===0 && card.type.includes('Action');},
-                async function(card){
-                    if(this.chosen === 0){
-                        this.chosen = 1;
-                        this.chosen_card = card;
-                    }
-                    clearFunc();
-                    let removed = await getHand().remove(card);
-                    if(removed){
-                        await play_card(card);
-                        removed = await getPlayField().remove(card);
-                        if(removed) await play_card(card);
-                    } 
-                    resolve('Crown finish');                       
-                }.bind(this),
-                'choose');
-            if(!contain_action) {
-                clearFunc();
-                resolve('no action');
-            }
-            */
     });
   }
   play_step2() {
@@ -1285,7 +1279,9 @@ class Crown extends Card {
 
       let mayPlayTreasure = mayPlayCardFromHand(
         function (card) {
-          return this.chosen === 0 && card.type.includes(Card.Type.TREASURE);
+          return (
+            this.chosen === 0 && getType(card).includes(Card.Type.TREASURE)
+          );
         }.bind(this),
         async function (card) {
           if (this.chosen === 0) {
@@ -1304,37 +1300,13 @@ class Crown extends Card {
         clearFunc();
         resolve("no treasure");
       }
-
-      /*
-            let contain_action = getHand().mark_cards(
-                function(card){return this.chosen===0 && card.type.includes(Card.Type.TREASURE);}.bind(this),
-                async function(card){
-                    if(this.chosen === 0){
-                        this.chosen = 1;
-                        this.chosen_card = card;
-                    }
-                    clearFunc();
-                    let removed = await getHand().remove(card);
-                    if(removed){
-                        await play_card(card);
-                        removed = await getPlayField().remove(card);
-                        if(removed) await play_card(card);
-                    } 
-                    resolve('Crown finish');                       
-                }.bind(this),
-                'choose');
-            if(!contain_action) {
-                clearFunc();
-                resolve('no action');
-            }
-            */
     });
   }
 }
 
 class Forum extends Card {
-  constructor(player) {
-    super("Forum", new Cost(5), `${Card.Type.ACTION}`, "Empires/", player);
+  constructor() {
+    super("Forum", new Cost(5), `${Card.Type.ACTION}`, "Empires/");
   }
   async play() {
     await drawNCards(3);
@@ -1358,10 +1330,8 @@ class Forum extends Card {
         "Confirm Discard",
         async function () {
           if (this.chosen < 2) return;
-          for (let i = 0; i < this.card_list.length; i++) {
-            let card = this.card_list[i];
-            await discard_card(card);
-          }
+          await discardCardList(this.card_list);
+
           clearFunc();
           resolve();
         }.bind(this)
@@ -1387,14 +1357,8 @@ class Forum extends Card {
 }
 
 class Groundskeeper extends Card {
-  constructor(player) {
-    super(
-      "Groundskeeper",
-      new Cost(5),
-      `${Card.Type.ACTION}`,
-      "Empires/",
-      player
-    );
+  constructor() {
+    super("Groundskeeper", new Cost(5), `${Card.Type.ACTION}`, "Empires/");
     this.activate_when_in_play = true;
     this.activate_when_gain = true;
   }
@@ -1403,7 +1367,9 @@ class Groundskeeper extends Card {
     await getBasicStats().addAction(1);
   }
   should_activate(reason, card) {
-    return reason === REASON_WHEN_GAIN && card.type.includes(Card.Type.VICTORY);
+    return (
+      reason === REASON_WHEN_GAIN && getType(card).includes(Card.Type.VICTORY)
+    );
   }
   async activate(reason, card) {
     await getBasicStats().addVictoryToken(1);
@@ -1411,13 +1377,12 @@ class Groundskeeper extends Card {
 }
 
 class Legionary extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Legionary",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.ATTACK}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   async play() {
@@ -1484,9 +1449,7 @@ class Legionary extends Card {
           if (chosen < n) return;
           clearFunc();
 
-          for (let card of discardList) {
-            await discard_card(card);
-          }
+          await discardCardList(discardList);
           resolve("Legionary finish");
         });
         getHand().mark_cards(
@@ -1509,13 +1472,12 @@ class Legionary extends Card {
 }
 
 class WildHunt extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "WildHunt",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.GATHERING}`,
-      "Empires/",
-      player
+      "Empires/"
     );
   }
   play() {
@@ -1595,7 +1557,7 @@ class HumbleCastle extends Card {
   }
   async add_score() {
     let castleCount = getPlayer().all_cards.filter((card) =>
-      card.type.includes(Card.Type.CASTLE)
+      getType(card).includes(Card.Type.CASTLE)
     ).length;
     await getBasicStats().addScore(castleCount);
   }
@@ -1608,18 +1570,23 @@ class CrumblingCastle extends Card {
       `${Card.Type.VICTORY} ${Card.Type.CASTLE}`,
       "Empires/Castles/"
     );
+    this.activate_when_trash = true;
   }
   async play() {}
-  async is_trashed() {
+  async is_gained() {
+    await this.add_score();
     await getBasicStats().addVictoryToken(1);
     await gain_card_name("Silver");
   }
-  async is_gained() {
-    await this.add_score();
-    await this.is_trashed();
-  }
   async add_score() {
     await getBasicStats().addScore(1);
+  }
+  should_activate(reason, card) {
+    return reason === REASON_WHEN_TRASH && card && card.id === this.id;
+  }
+  async activate(reason, card) {
+    await getBasicStats().addVictoryToken(1);
+    await gain_card_name("Silver");
   }
 }
 class SmallCastle extends Card {
@@ -1677,7 +1644,7 @@ class SmallCastle extends Card {
 
       let contain_castle = getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.CASTLE);
+          return getType(card).includes(Card.Type.CASTLE);
         },
         async function (card) {
           clearFunc();
@@ -1790,9 +1757,7 @@ class OpulentCastle extends Card {
         clearFunc();
         if (cardList.length > 0) {
           await revealCardList(cardList);
-          for (let card of cardList) {
-            await discard_card(card);
-          }
+          await discardCardList(cardList);
           await getBasicStats().addCoin(2 * cardList.length);
         }
 
@@ -1801,7 +1766,7 @@ class OpulentCastle extends Card {
 
       let contain_victory = getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.VICTORY);
+          return getType(card).includes(Card.Type.VICTORY);
         },
         async function (card) {
           cardList.push(card);
@@ -1877,10 +1842,10 @@ class GrandCastle extends Card {
     let victoryCount =
       getHand()
         .getCardAll()
-        .filter((card) => card.type.includes(Card.Type.VICTORY)).length +
+        .filter((card) => getType(card).includes(Card.Type.VICTORY)).length +
       getPlayField()
         .getCardAll()
-        .filter((card) => card.type.includes(Card.Type.VICTORY)).length;
+        .filter((card) => getType(card).includes(Card.Type.VICTORY)).length;
     await getBasicStats().addVictoryToken(victoryCount);
   }
   async add_score() {
@@ -1902,7 +1867,7 @@ class KingsCastle extends Card {
   }
   async add_score() {
     let castleCount = getPlayer().all_cards.filter((card) =>
-      card.type.includes(Card.Type.CASTLE)
+      getType(card).includes(Card.Type.CASTLE)
     ).length;
     await getBasicStats().addScore(castleCount * 2);
   }

@@ -1,8 +1,5 @@
 import React from 'react';
-import './OpponentSide.css';
-import CircularProgress from '@mui/material/CircularProgress';
-import Box from '@mui/material/Box';
-
+import styles from './OpponentSide.module.css';
 
 let opponentSide = null,
     opponentComponentList = [];
@@ -27,7 +24,7 @@ class OpponentSide extends React.Component{
     }
     render(){
         let opponentList = this.state.opponentList.map((opponent, index) => <OpponentBoard name={opponent.name} key={index}/>);
-        return <header className='header' style={{height: this.props.headerHeight}}>
+        return <header className={styles.header} style={{height: this.props.headerHeight}}>
             {opponentList}
         </header>;
     }
@@ -64,31 +61,33 @@ class OpponentBoard extends React.Component{
         const discardBackgroundImageStyle = (this.state.discard.length > 0)
                 ?{backgroundImage: `url(${this.state.discard[this.state.discard.length-1].src})`}
                 :{};
-        return <div className='opponent-side'>
+        const handCardList = this.state.hand.map((card, index) => <div key={index}
+            className={styles.hand_card}
+            style={{backgroundImage: `url(./img/Basic/Back.JPG)`}}>
+        </div>);
+        return <div className={styles.opponent_side}>
             <div>{this.state.name}</div>
 
-            <div className='opponent-discard tooltip' 
+            <div className={`${styles.opponent_discard} tooltip`}
                 style={discardBackgroundImageStyle}> 
                 <div className="tooltiptext">DISCARD</div>
-                <div className="cards-count">{this.state.discard.length}</div>
+                <div className={styles.cards_count}>{this.state.discard.length}</div>
             </div>
 
-            <div className='opponent-deck tooltip'
+            <div className={`${styles.opponent_deck} tooltip`}
                  style={{backgroundImage: `url(./img/Basic/Back.JPG)`}}>
                 <div className="tooltiptext">DECK</div>
-                <div className="cards-count">{this.state.deck.length}</div>
+                <div className={styles.cards_count}>{this.state.deck.length}</div>
 
             </div>
 
-            <div className="opponent-hand tooltip">
-                <div className="hand-card"></div>
-                <div className="hand-card"></div>
-                <div className="hand-card"></div>
+            <div className={`${styles.opponent_hand} tooltip`}>
+                {handCardList}
                 <div className="tooltiptext">HAND</div>
-                <div className="cards-count">{this.state.hand.length}</div>
+                <div className={styles.cards_count}>{this.state.hand.length}</div>
             </div>
 
-            <div className="opponent-score tooltip"
+            <div className={`${styles.opponent_score} tooltip`}
                  style={{backgroundImage: `url(./img/Basic/VP1.png)`}}>
                 <div className="tooltiptext">SCORE</div>
                 <span>{this.state.score}</span>

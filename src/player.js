@@ -27,6 +27,7 @@ import {
   deindent,
   getLogger,
   indent_,
+  writeNewPhase,
 } from "./Components/Logger.jsx";
 import { getGameState } from "./game_logic/GameState.js";
 import { landscapeEffectManager } from "./features/TableSide/LandscapeEffect/LandscapeEffectManager.js";
@@ -41,6 +42,7 @@ import {
   mayPlayCardFromHand,
   discardCardFromPlayField,
   may_payoff_debt,
+  announceOtherEndTurn,
 } from "./game_logic/Activity.js";
 
 import { reactionEffectManager } from "./game_logic/ReactionEffectManager.js";
@@ -73,6 +75,7 @@ import {
 } from "./utils/constants.js";
 import { getSupportHand } from "./features/SupportHand.jsx";
 import { AssistantSharp } from "@mui/icons-material";
+import { getType } from "./game_logic/basicCardFunctions.js";
 
 /*
         When Another: When play attack, when gain
@@ -108,10 +111,6 @@ class Player {
     this.turn = 0;
     this.move = 0; // is refered to undo
 
-    // player's different fields
-    /*
-        this.nocturneEffectHolder = new NocturneEffectHolder();
-        */
     this.all_cards = [];
 
     //attributes for buy phase
@@ -119,7 +118,6 @@ class Player {
     this.can_not_buy_action_this_turn = false; // Use for Deluded
 
     this.attacked_by_envious = false; // Use for Envious
-    this.is_attacked_by_enchantress = false; //Use for enchantress
 
     //this.can_not_be_attacked = false; // Use for Moat, Lighthouse and Shield, Guardian,
     //TODO
@@ -221,11 +219,11 @@ class Player {
         await this.update_buy_phase();
       }
     } else if (this.phase === PHASE_NIGHT) {
-      this.update_night_phase();
+      await this.update_night_phase();
     } else if (this.phase === PHASE_REACTION) {
       this.phase = PHASE_WAITING;
     } else if (this.phase === PHASE_WAITING) {
-      throw new Error("waiting...");
+      throw new Error("Phase: Waiting! Should be another phase");
     } else throw new Error("INVALID Phase handling");
   }
 
@@ -244,21 +242,15 @@ class Player {
     await getBasicStats().setAction(1);
     await getBasicStats().setBuy(1);
     await getBasicStats().setCoin(0);
-    getButtonPanel().clear_buttons();
   }
   async start_turn() {
     this.phase = PHASE_START_TURN;
 
     /*
-        if(this.ordinal_number === 0){
-            this.turn += 1;
-        }
-            */
+    this.move += 1;
     getGameState().update_state();
+    */
     this.turn += 1;
-
-    //this.move += 1;
-
     //this.can_not_be_attacked = false;
     this.unaffected_id_list = [];
     await this.update_score();
@@ -266,17 +258,19 @@ class Player {
     clear_indent();
     getLogger().writeMessage("TURN " + this.turn + ":");
     getGameState().new_turn();
+    getBasicStats().setNewTurn();
     indent_();
-    //play all remaining duration/set aside cards
+
     await reactionEffectManager.solve_cards_at_start_turn();
 
-    this.start_action_phase();
+    await this.start_action_phase();
   }
   async start_extra_turn() {
     this.phase = PHASE_START_TURN;
     this.extra_turn.currentlyInExtraTurn = true;
     //this.move += 1; TODO
-    //this.can_not_be_attacked = false;
+    //getGameState().update_state();
+    // //this.can_not_be_attacked = false;
     this.unaffected_id_list = [];
 
     clear_indent();
@@ -285,45 +279,36 @@ class Player {
     indent_();
     //play all remaining duration/set aside cards
     await reactionEffectManager.solve_cards_at_start_turn();
-    getGameState().update_state();
-    this.start_action_phase();
-  }
-  start_action_phase() {
-    this.phase = PHASE_ACTION;
-    clear_indent();
-    indent_();
-    getLogger().writeMessage("ACTION PHASE:");
-    indent_();
 
+    await this.start_action_phase();
+  }
+  async start_action_phase() {
+    this.phase = PHASE_ACTION;
+    writeNewPhase("ACTION PHASE:");
     audioManager.playSound("yourTurn");
-    this.update_action_phase();
+
+    await this.update_action_phase();
   }
   async start_buy_phase() {
     this.phase = PHASE_BUY;
     this.can_play_treasure_buy_phase = true;
 
-    clear_indent();
-    indent_();
-    getLogger().writeMessage("BUY PHASE:");
-    indent_();
+    writeNewPhase("BUY PHASE:");
     audioManager.playSound("yourTurn");
 
     await reactionEffectManager.solve_cards_at_start_buy_phase();
     await this.update_buy_phase();
   }
-  start_night_phase() {
-    if (!getHand().has_card((c) => c.type.includes("Night"))) {
-      this.start_clean_up_phase();
+  async start_night_phase() {
+    if (!getHand().has_card((c) => getType(c).includes(Card.Type.NIGHT))) {
+      await this.start_clean_up_phase();
       return;
     }
     this.phase = PHASE_NIGHT;
-    clear_indent();
-    indent_();
-    getLogger().writeMessage("NIGHT PHASE:");
-    indent_();
-
+    writeNewPhase("NIGHT PHASE:");
     audioManager.playSound("yourTurn");
-    this.update_night_phase();
+
+    await this.update_night_phase();
   }
   async start_clean_up_phase() {
     this.phase = PHASE_CLEAN_UP;
@@ -334,7 +319,6 @@ class Player {
         await getDiscard().addCard(await getHand().pop());
       }
       while (getPlayField().length() > 0) {
-        //TODO: Discard from play
         let card = await getPlayField().getCardAll()[0];
         if (card.not_discard_in_cleanup) {
           await getPlayField().remove(card);
@@ -351,8 +335,9 @@ class Player {
     if (
       getBasicStats().getDebt() > 0 &&
       getBasicStats().getCoin() + getBasicStats().getCoffer() > 0
-    )
+    ) {
       await may_payoff_debt();
+    }
     await this.end_turn();
   }
   // UPDATE PHASES
@@ -365,322 +350,345 @@ class Player {
       await this.start_buy_phase();
       return;
     }
-    /*
-        if(!getHand().has_card(card => card.type.includes(Card.Type.ACTION))){
-            await this.start_buy_phase();
-            return;
-        }
-            */
-    let clearFunc = async function () {
+
+    let continueActionPhase = await new Promise(async (resolve) => {
+      let clearFunc = async function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+        await getHand().remove_mark();
+
+        getSupportHand().clear();
+        getSupportHand().hide();
+        getDeck().removeCanSelect();
+        landscapeEffectManager.remove_mark();
+      };
+
       getButtonPanel().clear_buttons();
-      setInstruction("");
-      await getHand().remove_mark();
+      getButtonPanel().add_button(
+        "End Action",
+        async function () {
+          await clearFunc();
+          resolve(false);
+          //await this.start_buy_phase();
+        }.bind(this)
+      );
 
-      getSupportHand().clear();
-      getSupportHand().hide();
-      getDeck().removeCanSelect();
-      landscapeEffectManager.remove_mark();
-    };
-    getButtonPanel().clear_buttons();
-    getButtonPanel().add_button(
-      "End Action",
-      async function () {
-        await clearFunc();
-        await this.start_buy_phase();
-      }.bind(this)
-    );
+      let mayPlayAction = mayPlayCardFromHand(
+        function (card) {
+          return getType(card).includes(Card.Type.ACTION);
+        },
+        async function (card) {
+          await getBasicStats().setAction(getBasicStats().getAction() - 1);
+          await clearFunc();
 
-    let mayPlayAction = mayPlayCardFromHand(
-      function (card) {
-        return card.type.includes(Card.Type.ACTION);
-      },
-      async function (card) {
-        this.move += 1;
-        await getBasicStats().setAction(getBasicStats().getAction() - 1);
-        await clearFunc();
+          await play_card(card);
 
-        await play_card(card);
+          resolve(true);
+        }.bind(this)
+      );
+      if (!mayPlayAction) {
+        clearFunc();
+        resolve(false);
+        //await this.start_buy_phase();
+        return;
+      }
 
-        getGameState().update_state();
-        this.update_action_phase();
-      }.bind(this)
-    );
-    if (!mayPlayAction) {
-      clearFunc();
-      await this.start_buy_phase();
-      return;
-    }
+      setInstruction("You may play Action");
 
-    setInstruction("You may play Action");
+      landscapeEffectManager.mark_cards(
+        function (card) {
+          return (
+            card.getType().includes("Way") &&
+            card.getCard().should_activate_way()
+          );
+        },
+        async function (card) {
+          await clearFunc();
+          await getBasicStats().setAction(getBasicStats().getAction() - 1);
 
-    landscapeEffectManager.mark_cards(
-      function (card) {
-        return (
-          card.getType().includes("Way") && card.getCard().should_activate_way()
-        );
-      },
-      async function (card) {
-        await clearFunc();
-        this.move += 1;
-        await getBasicStats().setAction(getBasicStats().getAction() - 1);
+          await card.activate_way();
+          resolve(true);
+        }.bind(this)
+      );
+      this.move += 1;
+      getGameState().update_state();
+    });
 
-        await card.activate_way();
-        getGameState().update_state();
-        await this.update_action_phase();
-      }.bind(this)
-    );
+    if (continueActionPhase) {
+      await this.update_action_phase();
+    } else await this.start_buy_phase();
   }
   async update_buy_phase() {
     if (this.phase !== PHASE_BUY) {
       await this.continue_phase();
       return;
     }
+    const coin = getBasicStats().getCoin(),
+      coffer = getBasicStats().getCoffer(),
+      debt = getBasicStats().getDebt(),
+      buy = getBasicStats().getBuy();
     if (
-      (getBasicStats().getDebt() <= 0 && getBasicStats().getBuy() <= 0) ||
-      (getBasicStats().getDebt() > 0 &&
-        getBasicStats().getCoin() + getBasicStats().getCoffer() <= 0 &&
-        !this.can_play_treasure_buy_phase)
+      (debt <= 0 && buy <= 0) ||
+      (debt > 0 && coin + coffer <= 0 && !this.can_play_treasure_buy_phase)
     ) {
       await this.end_buy_phase();
       return;
     }
-    let clearFunc = function () {
-      getButtonPanel().clear_buttons();
-      setInstruction("");
-      getHand().remove_mark();
-      removeMarkSupplyPile();
-      landscapeEffectManager.remove_mark();
-      hide_number_picker();
-    };
-    getButtonPanel().clear_buttons();
-    getButtonPanel().add_button(
-      "End Buy",
-      async function () {
-        clearFunc();
-        await this.end_buy_phase();
-      }.bind(this)
-    );
 
-    if (this.can_play_treasure_buy_phase) {
-      let contain_treasure = getHand().mark_cards(
-        (card) => card.type.includes("Treasure"),
-        async function (card) {
-          this.move += 1;
+    let continueBuyPhase = await new Promise(async (resolve) => {
+      let clearFunc = function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+        getHand().remove_mark();
+        removeMarkSupplyPile();
+        landscapeEffectManager.remove_mark();
+        hide_number_picker();
+      };
+
+      this.move += 1;
+      getGameState().update_state();
+
+      getButtonPanel().clear_buttons();
+      getButtonPanel().add_button(
+        "End Buy",
+        async function () {
+          clearFunc();
+          resolve(false);
+        }.bind(this)
+      );
+
+      if (this.can_play_treasure_buy_phase) {
+        let contain_treasure = getHand().mark_cards(
+          (card) => getType(card).includes(Card.Type.TREASURE),
+          async function (card) {
+            clearFunc();
+
+            await getHand().remove(card);
+            await play_card(card);
+
+            resolve(true);
+          }.bind(this),
+          "choose"
+        );
+        //Autoplay Treasure button
+        if (
+          contain_treasure &&
+          getHand().has_card((c) =>
+            ["Copper", "Silver", "Gold", "Platinum"].includes(c.name)
+          )
+        ) {
+          getButtonPanel().add_button(
+            "Autolay Treasures",
+            async function () {
+              clearFunc();
+              await autoplay_treasures();
+
+              resolve(true);
+            }.bind(this)
+          );
+        }
+      }
+
+      if (debt > 0) {
+        await may_payoff_debt();
+        clearFunc();
+
+        if (getBasicStats().getDebt() > 0) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      } else {
+        setInstruction("You may buy card");
+        let buyGainCardFromPile = async function (pile) {
+          this.can_play_treasure_buy_phase = false;
           clearFunc();
 
-          await getHand().remove(card);
-          await play_card(card);
+          await buy_and_gain_card(pile);
+        }.bind(this);
+        let decideToGainAnimalFair = function (pile) {
+          if (
+            !(
+              pile.getName() === "AnimalFair" &&
+              getHand().has_card((card) =>
+                getType(card).includes(Card.Type.ACTION)
+              )
+            )
+          )
+            return;
 
-          getGameState().update_state();
-          this.update_buy_phase();
-        }.bind(this),
-        "choose"
-      );
-      //Autoplay Treasure button
-      if (
-        contain_treasure &&
-        getHand().has_card((c) =>
-          ["Copper", "Silver", "Gold", "Platinum"].includes(c.name)
-        )
-      ) {
-        getButtonPanel().add_button(
-          "Autolay Treasures",
-          async function () {
-            this.move += 1;
+          return new Promise((resolve0) => {
+            let clearFunc0 = function () {
+              getHand().remove_mark();
+              getButtonPanel().clear_buttons();
+              setInstruction("");
+            };
+            getButtonPanel().clear_buttons();
+            setInstruction("You may trash an Action card to buy Animal Fair.");
+
+            getHand().mark_cards(
+              (card) => getType(card).includes(Card.Type.ACTION),
+              async function (card) {
+                clearFunc0();
+                await trash_card(card);
+
+                await getBasicStats().addBuy(-1);
+                await gain_card(pile);
+
+                resolve0();
+              }.bind(this),
+              "trash"
+            );
+
+            let cost = new Cost(
+              getBasicStats().getCoin() + getBasicStats().getCoffer()
+            );
+            if (cost.sufficientToBuy(pile.getCost())) {
+              getButtonPanel().add_button("Pay to gain", async function () {
+                clearFunc0();
+                await buyGainCardFromPile(pile);
+                resolve0();
+              });
+            }
+          });
+        }.bind(this);
+        markSupplyPile(
+          function (pile) {
+            let basicStats = getBasicStats(),
+              cost = new Cost(basicStats.getCoin() + basicStats.getCoffer());
+            if (this.can_not_buy_action_this_turn) {
+              return (
+                pile.getQuantity() > 0 &&
+                cost.sufficientToBuy(pile.getCost()) &&
+                !pile.getType().includes(Card.Type.ACTION)
+              );
+            } else {
+              return (
+                pile.getQuantity() > 0 &&
+                (cost.sufficientToBuy(pile.getCost()) ||
+                  (pile.getName() === "AnimalFair" &&
+                    getHand().has_card((card) =>
+                      getType(card).includes(Card.Type.ACTION)
+                    )))
+              );
+            }
+          }.bind(this),
+          async function (pile) {
+            if (
+              pile.getName() === "AnimalFair" &&
+              getHand().has_card((card) =>
+                getType(card).includes(Card.Type.ACTION)
+              )
+            ) {
+              clearFunc();
+              await decideToGainAnimalFair(pile);
+            } else {
+              await buyGainCardFromPile(pile);
+            }
+            resolve(true);
+          }.bind(this)
+        );
+        landscapeEffectManager.mark_cards(
+          function (landscape_card) {
+            let cost = new Cost(
+              getBasicStats().getCoin() + getBasicStats().getCoffer()
+            );
+            return (
+              (landscape_card.getType().includes("Event") ||
+                landscape_card.getType().includes("Project")) &&
+              cost.sufficientToBuy(landscape_card.getCost())
+            );
+          },
+          async function (card) {
             clearFunc();
-            await autoplay_treasures();
 
-            getGameState().update_state();
-            await this.update_buy_phase();
+            this.can_play_treasure_buy_phase = false;
+            await buy_landscape_card(card);
+
+            resolve(true);
           }.bind(this)
         );
       }
-    }
-    if (getBasicStats().getDebt() > 0) {
-      await may_payoff_debt();
-      clearFunc();
-
-      if (getBasicStats().getDebt() > 0) {
-        clearFunc();
-        this.end_buy_phase();
-      } else {
-        await this.update_buy_phase();
-      }
+    });
+    if (continueBuyPhase) {
+      return await this.update_buy_phase();
     } else {
-      setInstruction("You may buy card");
-      let buyGainCardFromPile = async function (pile) {
-        this.move += 1;
-        this.can_play_treasure_buy_phase = false;
-        clearFunc();
+      return await this.end_buy_phase();
+    }
+  }
+  async update_night_phase() {
+    if (this.phase !== PHASE_NIGHT) {
+      await this.continue_phase();
+      return;
+    }
 
-        await buy_and_gain_card(pile);
-        getGameState().update_state();
-        await this.update_buy_phase();
-      }.bind(this);
-      let decideToGainAnimalFair = function (pile) {
-        if (
-          !(
-            pile.getName() === "AnimalFair" &&
-            getHand().has_card((card) => card.type.includes(Card.Type.ACTION))
-          )
-        )
-          return;
+    let continueNightPhase = await new Promise(async (resolve) => {
+      let clearFunc = function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+        getHand().remove_mark();
+      };
 
-        return new Promise((resolve) => {
-          let clearFunc0 = function () {
-            getHand().remove_mark();
-            getButtonPanel().clear_buttons();
-            setInstruction("");
-          };
-          getButtonPanel().clear_buttons();
-          setInstruction("You may trash an Action card to buy Animal Fair.");
+      setInstruction("You may play Night card");
 
-          getHand().mark_cards(
-            (card) => card.type.includes(Card.Type.ACTION),
-            async function (card) {
-              clearFunc0();
-              await trash_card(card);
-
-              this.move += 1;
-              await getBasicStats().addBuy(-1);
-              await gain_card(pile);
-              getGameState().update_state();
-              this.update_buy_phase();
-              resolve();
-            }.bind(this),
-            "trash"
-          );
-
-          let cost = new Cost(
-            getBasicStats().getCoin() + getBasicStats().getCoffer()
-          );
-          if (cost.sufficientToBuy(pile.getCost())) {
-            getButtonPanel().add_button("Pay to gain", async function () {
-              clearFunc0();
-              await buyGainCardFromPile(pile);
-              resolve();
-            });
-          }
-        });
-      }.bind(this);
-      markSupplyPile(
-        function (pile) {
-          let basicStats = getBasicStats(),
-            cost = new Cost(basicStats.getCoin() + basicStats.getCoffer());
-          if (this.can_not_buy_action_this_turn) {
-            return (
-              pile.getQuantity() > 0 &&
-              cost.sufficientToBuy(pile.getCost()) &&
-              !pile.getType().includes("Action")
-            );
-          } else {
-            return (
-              pile.getQuantity() > 0 &&
-              (cost.sufficientToBuy(pile.getCost()) ||
-                (pile.getName() === "AnimalFair" &&
-                  getHand().has_card((card) =>
-                    card.type.includes(Card.Type.ACTION)
-                  )))
-            );
-          }
-        }.bind(this),
-        async function (pile) {
-          if (
-            pile.getName() === "AnimalFair" &&
-            getHand().has_card((card) => card.type.includes(Card.Type.ACTION))
-          ) {
-            clearFunc();
-            await decideToGainAnimalFair(pile);
-          } else {
-            await buyGainCardFromPile(pile);
-          }
+      getButtonPanel().clear_buttons();
+      getButtonPanel().add_button(
+        "End Night",
+        async function () {
+          clearFunc();
+          resolve(false);
         }.bind(this)
       );
-      landscapeEffectManager.mark_cards(
-        function (landscape_card) {
-          let cost = new Cost(
-            getBasicStats().getCoin() + getBasicStats().getCoffer()
-          );
-          return (
-            (landscape_card.getType().includes("Event") ||
-              landscape_card.getType().includes("Project")) &&
-            cost.sufficientToBuy(landscape_card.getCost())
-          );
+
+      let contain_night = getHand().mark_cards(
+        function (card) {
+          return getType(card).includes(Card.Type.NIGHT);
         },
         async function (card) {
           clearFunc();
-
-          this.move += 1;
-          this.can_play_treasure_buy_phase = false;
-          await buy_landscape_card(card);
-
-          getGameState().update_state();
-          this.update_buy_phase();
+          await getHand().remove(card);
+          await play_card(card);
+          resolve(true);
         }.bind(this)
       );
-    }
-  }
-  update_night_phase() {
-    if (this.phase !== PHASE_NIGHT) {
-      this.continue_phase(); //await ?
-      return;
-    }
-    let clearFunc = function () {
-      getButtonPanel().clear_buttons();
-      setInstruction("");
-      getHand().remove_mark();
-    };
-    getButtonPanel().clear_buttons();
-    getButtonPanel().add_button(
-      "End Night",
-      function () {
+      if (!contain_night) {
         clearFunc();
-        this.end_night_phase();
-      }.bind(this)
-    );
+        resolve(false);
+      }
 
-    let contain_night = getHand().mark_cards(
-      function (card) {
-        return card.type.includes("Night");
-      },
-      async function (card) {
-        this.move += 1;
-        clearFunc();
-        await getHand().remove(card);
-        await play_card(card);
-        getGameState().update_state();
-        this.update_night_phase();
-      }.bind(this)
-    );
-    if (!contain_night) {
-      clearFunc();
-      this.end_night_phase();
+      this.move += 1;
+      getGameState().update_state();
+    });
+    if (continueNightPhase) {
+      return await this.update_night_phase();
     } else {
-      setInstruction("You may play Night card");
+      return await this.end_night_phase();
     }
   }
 
   async end_buy_phase() {
     await reactionEffectManager.solve_cards_at_end_buy_phase();
     deindent();
-    this.start_night_phase();
+    await this.start_night_phase();
   }
-  end_night_phase() {
+  async end_night_phase() {
     deindent();
-    this.start_clean_up_phase();
+    await this.start_clean_up_phase();
   }
   async end_turn() {
     this.phase = PHASE_END_TURN;
     this.can_not_buy_action_this_turn = false;
     this.attacked_by_envious = false;
-    this.is_attacked_by_enchantress = false;
-    await reactionEffectManager.solve_cards_at_end_turn();
+    await reactionEffectManager.solve_cards_at_end_your_turn();
+    //await reactionEffectManager.solve_cards_at_end_turn();
     HexBoonManager.returnAllBoon();
 
     await getBasicStats().setAction(1);
     await getBasicStats().setBuy(1);
     await getBasicStats().setCoin(0);
     getBasicStats().ignoreAddActionsThisTurn = false; // Use for SnowyVillage
+
+    await announceOtherEndTurn();
 
     if (this.extra_turn.playExtraTurn) {
       if (this.extra_turn.cardsCauseExtraTurn.length > 0) {

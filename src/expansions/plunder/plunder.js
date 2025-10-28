@@ -2,11 +2,13 @@ import { Card, Cost } from "../cards.js";
 import {
   REASON_START_TURN,
   REASON_END_TURN,
-  REASON_WHEN_PLAY,
+  REASON_AFTER_PLAY,
   REASON_WHEN_GAIN,
   REASON_WHEN_ANOTHER_GAIN,
   effectBuffer,
   REASON_WHEN_DISCARD_FROM_PLAY,
+  REASON_WHEN_TRASH,
+  REASON_END_YOUR_TURN,
 } from "../../game_logic/ReactionEffectManager.js";
 
 import {
@@ -46,15 +48,19 @@ import {
   gainCardByType,
   gain_card_from_trash,
   mayPlayCardFromHand,
+  Activity,
+  trashCardList,
+  discardCardList,
 } from "../../game_logic/Activity.js";
 import { getGameState } from "../../game_logic/GameState.js";
 import { findSupplyPile } from "../../features/TableSide/SupplyPile.jsx";
 import { opponentManager } from "../../features/OpponentSide/Opponent.js";
 import { getLogger } from "../../Components/Logger.jsx";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 /*
 class  extends Card{
-    constructor(player){
-        super("", , Card.Type.TREASURE, "Plunder/", player);
+    constructor(){
+        super("", , Card.Type.TREASURE, "Plunder/");
     }
     play(){
         
@@ -65,25 +71,28 @@ class  extends Card{
 //NORMAL SUPPLY CARDS
 // Cards can gain LOOT
 class JewelledEgg extends Card {
-  constructor(player) {
-    super("JewelledEgg", new Cost(2), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("JewelledEgg", new Cost(2), Card.Type.TREASURE, "Plunder/");
+    this.activate_when_trash = true;
   }
   async play() {
     await getBasicStats().addCoin(1);
     await getBasicStats().addBuy(1);
   }
-  async is_trashed() {
+  should_activate(reason, card) {
+    return reason === REASON_WHEN_TRASH && card && card.id === this.id;
+  }
+  async activate(reason, card) {
     await gainCardByType(Card.Type.LOOT);
   }
 }
 class Search extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Search",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_in_play = true;
@@ -118,8 +127,8 @@ class Search extends Card {
   }
 }
 class Pickaxe extends Card {
-  constructor(player) {
-    super("Pickaxe", new Cost(5), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("Pickaxe", new Cost(5), Card.Type.TREASURE, "Plunder/");
   }
   async play() {
     await getBasicStats().addCoin(1);
@@ -135,7 +144,7 @@ class Pickaxe extends Card {
             if (chosen === 0) {
               getHand().remove_mark();
               chosen = 1;
-              let cost = card.cost;
+              let cost = getCost(card);
               await trash_card(card);
               if (cost && cost.coin >= 3) {
                 let new_loot = await gainCardByType(Card.Type.LOOT, getHand());
@@ -150,8 +159,8 @@ class Pickaxe extends Card {
   }
 }
 class WealthyVillage extends Card {
-  constructor(player) {
-    super("WealthyVillage", new Cost(5), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("WealthyVillage", new Cost(5), Card.Type.ACTION, "Plunder/");
   }
   async play() {
     await draw1();
@@ -172,13 +181,12 @@ class WealthyVillage extends Card {
   }
 }
 class Cutthroat extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Cutthroat",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.ATTACK,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_gain = false;
@@ -211,8 +219,8 @@ class Cutthroat extends Card {
       getButtonPanel().add_button("OK", async function () {
         if (chosen < n) return;
         clearFunc();
-        for (let card of cardList) {
-          await discard_card(card);
+        if (cardList.length > 0) {
+          await discardCardList(cardList);
         }
         resolve("Cutthroat finish");
       });
@@ -236,8 +244,8 @@ class Cutthroat extends Card {
     return (
       (reason === REASON_WHEN_GAIN || reason === REASON_WHEN_ANOTHER_GAIN) &&
       card &&
-      card.type.includes(Card.Type.TREASURE) &&
-      card.cost.isGreaterOrEqual(cost)
+      getType(card).includes(Card.Type.TREASURE) &&
+      getCost(card).isGreaterOrEqual(cost)
     );
   }
   async activate(reason, card) {
@@ -249,8 +257,8 @@ class Cutthroat extends Card {
   }
 }
 class SackofLoot extends Card {
-  constructor(player) {
-    super("SackofLoot", new Cost(6), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("SackofLoot", new Cost(6), Card.Type.TREASURE, "Plunder/");
   }
   async play() {
     await getBasicStats().addBuy(1);
@@ -260,17 +268,17 @@ class SackofLoot extends Card {
 }
 
 class Cage extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Cage",
       new Cost(2),
       Card.Type.TREASURE + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.chosen_id_list = [];
     this.activate_when_in_play = false;
     this.activate_when_end_turn = false;
+    this.activate_when_end_your_turn = false;
     this.activate_when_gain = true;
     this.not_discard_in_cleanup = false;
   }
@@ -323,19 +331,20 @@ class Cage extends Card {
     return (
       (reason === REASON_WHEN_GAIN &&
         card &&
-        card.type.includes(Card.Type.VICTORY)) ||
-      reason === REASON_END_TURN
+        getType(card).includes(Card.Type.VICTORY)) ||
+      reason === REASON_END_TURN ||
+      reason === REASON_END_YOUR_TURN
     );
   }
   async activate(reason, card) {
     if (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.type.includes(Card.Type.VICTORY)
+      getType(card).includes(Card.Type.VICTORY)
     ) {
       this.activate_when_gain = false;
       this.activate_when_end_turn = true;
-    } else if (reason === REASON_END_TURN) {
+    } else if (reason === REASON_END_TURN || reason === REASON_END_YOUR_TURN) {
       for (let id of this.chosen_id_list) {
         let removed = await getSetAside().removeCardById(id);
         if (removed) {
@@ -356,13 +365,12 @@ class Cage extends Card {
 }
 
 class Grotto extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Grotto",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
@@ -424,19 +432,23 @@ class Grotto extends Card {
     this.activate_when_start_turn = false;
 
     let count = 0;
+    let discardList = [];
     for (let id of this.chosen_id_list) {
       let removed = await getSetAside().removeCardById(id);
       if (removed) {
-        await discard_card(removed, false);
+        discardList.push(removed);
         count += 1;
       }
+    }
+    if (discardList.length > 0) {
+      await discardCardList(discardList, false);
     }
     await drawNCards(count);
   }
 }
 class Shaman extends Card {
-  constructor(player) {
-    super("Shaman", new Cost(2), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("Shaman", new Cost(2), Card.Type.ACTION, "Plunder/");
     this.activate_when_start_turn = true;
     this.description =
       "In games using this, at the start of your turn, gain a card from the trash costing up to $6.";
@@ -483,13 +495,13 @@ class Shaman extends Card {
     return (
       reason === REASON_START_TURN &&
       getTrash().length() > 0 &&
-      getTrash().has_card((card) => cost.isGreaterOrEqual(card.cost))
+      getTrash().has_card((card) => cost.isGreaterOrEqual(getCost(card)))
     );
   }
   activate(reason, card) {
     if (getTrash().length() <= 0) return;
     let cost = new Cost(6);
-    if (!getTrash().has_card((card) => cost.isGreaterOrEqual(card.cost)))
+    if (!getTrash().has_card((card) => cost.isGreaterOrEqual(getCost(card))))
       return;
 
     return new Promise(async (resolve) => {
@@ -508,7 +520,7 @@ class Shaman extends Card {
 
       supportHand.mark_cards(
         function (card) {
-          return chosen === 0 && cost.isGreaterOrEqual(card.cost);
+          return chosen === 0 && cost.isGreaterOrEqual(getCost(card));
         },
         async function (card) {
           chosen += 1;
@@ -523,13 +535,12 @@ class Shaman extends Card {
   }
 }
 class SecludedShrine extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "SecludedShrine",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_gain = false;
@@ -544,7 +555,7 @@ class SecludedShrine extends Card {
     return (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.type.includes(Card.Type.TREASURE)
+      getType(card).includes(Card.Type.TREASURE)
     );
   }
   activate(reason, card) {
@@ -563,14 +574,11 @@ class SecludedShrine extends Card {
       };
 
       getButtonPanel().add_button("Confirm Trashing", async function () {
+        clearFunc();
         if (card_list.length > 0) {
-          clearFunc();
-          while (card_list.length > 0) {
-            let card = card_list.pop();
-            await trash_card(card);
-          }
-          resolve("SecludedShrine activate finish");
+          await trashCardList(card_list);
         }
+        resolve("SecludedShrine activate finish");
       });
       getHand().mark_cards(
         function (card) {
@@ -585,13 +593,12 @@ class SecludedShrine extends Card {
   }
 }
 class Siren extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Siren",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.ATTACK,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -645,7 +652,7 @@ class Siren extends Card {
     let cardLocation = cardLocationTrack.getLocation();
     if (
       getHand().getLength() <= 0 ||
-      !getHand().has_card((card) => card.type.includes(Card.Type.ACTION))
+      !getHand().has_card((card) => getType(card).includes(Card.Type.ACTION))
     ) {
       await this.activate_step2(cardLocationTrack);
       return;
@@ -671,7 +678,7 @@ class Siren extends Card {
 
       getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.ACTION);
+          return getType(card).includes(Card.Type.ACTION);
         },
         async function (card) {
           clearFunc();
@@ -693,13 +700,12 @@ class Siren extends Card {
   }
 }
 class Stowaway extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Stowaway",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.REACTION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_in_hand = true;
@@ -720,7 +726,7 @@ class Stowaway extends Card {
       reason === REASON_START_TURN ||
       ((reason === REASON_WHEN_ANOTHER_GAIN || reason === REASON_WHEN_GAIN) &&
         card &&
-        card.type.includes(Card.Type.DURATION))
+        getType(card).includes(Card.Type.DURATION))
     );
   }
   async activate(reason, card) {
@@ -734,7 +740,7 @@ class Stowaway extends Card {
     } else if (
       (reason === REASON_WHEN_ANOTHER_GAIN || reason === REASON_WHEN_GAIN) &&
       card &&
-      card.type.includes(Card.Type.DURATION)
+      getType(card).includes(Card.Type.DURATION)
     ) {
       await this.activate_step1();
     }
@@ -786,13 +792,12 @@ class Stowaway extends Card {
   }
 }
 class Taskmaster extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Taskmaster",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_gain = false;
@@ -810,7 +815,7 @@ class Taskmaster extends Card {
   should_activate(reason, card) {
     let cost = new Cost(5);
     return (
-      (reason === REASON_WHEN_GAIN && card && cost.isEqual(card.cost)) ||
+      (reason === REASON_WHEN_GAIN && card && cost.isEqual(getCost(card))) ||
       reason === REASON_START_TURN
     );
   }
@@ -829,13 +834,12 @@ class Taskmaster extends Card {
   }
 }
 class Abundance extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Abundance",
       new Cost(4),
       Card.Type.TREASURE + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_gain = false;
@@ -849,7 +853,7 @@ class Abundance extends Card {
     return (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.type.includes(Card.Type.ACTION)
+      getType(card).includes(Card.Type.ACTION)
     );
   }
   async activate() {
@@ -860,13 +864,12 @@ class Abundance extends Card {
   }
 }
 class CabinBoy extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "CabinBoy",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_start_turn = false;
@@ -928,7 +931,10 @@ class CabinBoy extends Card {
 
       markSupplyPile(
         function (pile) {
-          return pile.getType().includes(Card.Type.DURATION);
+          return (
+            pile.getQuantity() > 0 &&
+            pile.getType().includes(Card.Type.DURATION)
+          );
         },
         async function (pile) {
           clearFunc();
@@ -940,8 +946,8 @@ class CabinBoy extends Card {
   }
 }
 class Crucible extends Card {
-  constructor(player) {
-    super("Crucible", new Cost(4), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("Crucible", new Cost(4), Card.Type.TREASURE, "Plunder/");
   }
   play() {
     if (getHand().getLength() <= 0) return;
@@ -961,7 +967,7 @@ class Crucible extends Card {
           clearFunc();
 
           await trash_card(card);
-          await getBasicStats().addCoin(card.cost.getCoin());
+          await getBasicStats().addCoin(getCost(card).getCoin());
 
           resolve();
         },
@@ -972,33 +978,32 @@ class Crucible extends Card {
   }
 }
 class Flagship extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Flagship",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.COMMAND,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
-    this.activate_when_play = false;
+    this.activate_after_play = false;
     this.not_discard_in_cleanup = false;
   }
   async play() {
     await getBasicStats().addCoin(2);
-    this.activate_when_play = true;
+    this.activate_after_play = true;
     this.not_discard_in_cleanup = true;
   }
   should_activate(reason, card) {
     return (
-      reason === REASON_WHEN_PLAY &&
+      reason === REASON_AFTER_PLAY &&
       card &&
-      !card.type.includes(Card.Type.COMMAND) &&
-      card.type.includes(Card.Type.ACTION)
+      !getType(card).includes(Card.Type.COMMAND) &&
+      getType(card).includes(Card.Type.ACTION)
     );
   }
   async activate(reason, card) {
-    this.activate_when_play = false;
+    this.activate_after_play = false;
     this.not_discard_in_cleanup = false;
     if (!card) return;
 
@@ -1006,8 +1011,8 @@ class Flagship extends Card {
   }
 }
 class FortuneHunter extends Card {
-  constructor(player) {
-    super("FortuneHunter", new Cost(4), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("FortuneHunter", new Cost(4), Card.Type.ACTION, "Plunder/");
   }
   async play() {
     await getBasicStats().addCoin(2);
@@ -1045,7 +1050,7 @@ class FortuneHunter extends Card {
 
       let contain_treasure = supportHand.mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.TREASURE);
+          return getType(card).includes(Card.Type.TREASURE);
         },
         async function (card) {
           card.ff = true;
@@ -1109,13 +1114,12 @@ class FortuneHunter extends Card {
   }
 }
 class Gondola extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Gondola",
       new Cost(4),
       Card.Type.TREASURE + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_start_turn = false;
@@ -1172,7 +1176,7 @@ class Gondola extends Card {
 
       let mayPlayAction = mayPlayCardFromHand(
         function (card) {
-          return card.type.includes(Card.Type.ACTION);
+          return getType(card).includes(Card.Type.ACTION);
         },
         async function (card) {
           clearFunc();
@@ -1185,25 +1189,6 @@ class Gondola extends Card {
         clearFunc();
         resolve();
       }
-
-      /*
-            let contain_action = getHand().mark_cards(
-                function(card){return card.type.includes(Card.Type.ACTION)},
-                async function(card){
-                    clearFunc();
-                    let removed = await getHand().removeCardById(card.id);
-                    if(removed) await play_card(card);
-
-                    resolve();
-                },
-                'choose',
-            );
-
-            if(!contain_action){
-                clearFunc();
-                resolve();
-            }
-            */
     });
   }
   should_activate(reason) {
@@ -1216,46 +1201,71 @@ class Gondola extends Card {
   }
 }
 class HarborVillage extends Card {
-  constructor(player) {
-    super("HarborVillage", new Cost(4), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("HarborVillage", new Cost(4), Card.Type.ACTION, "Plunder/");
     this.description =
       "After the next Action you play this turn, if it gave you +$, +$1.";
+    this.activate_after_play = false;
+    this.activate_when_in_play = false;
+    this.chosen_id = -1; // Save Activity id
   }
   async play() {
     await draw1();
     await getBasicStats().addAction(2);
-    //TODO
+    this.activate_after_play = true;
+    this.activate_when_in_play = true;
+
+    this.chosen_id = Activity.current.id;
+    //TODO: Khong dung lam, khi ket hop ThroneRoom
+  }
+  should_activate(reason, card) {
+    return (
+      reason === REASON_AFTER_PLAY &&
+      card &&
+      Activity.current &&
+      Activity.current.id > this.chosen_id &&
+      getType(card).includes(Card.Type.ACTION)
+    );
+  }
+  async activate(reason, card) {
+    this.activate_after_play = false;
+    this.chosen_id = -1;
+    let id = card.id;
+    if (getBasicStats().addCoinThisTurnIdList.find((x) => x === id)) {
+      getBasicStats().addCoin(1);
+    }
   }
 }
 class LandingParty extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "LandingParty",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
-    this.activate_when_play = false;
+    this.activate_after_play = false;
   }
   async play() {
     await drawNCards(2);
     await getBasicStats().addAction(2);
 
     this.not_discard_in_cleanup = true;
-    this.activate_when_play = true;
+    this.activate_after_play = true;
   }
   should_activate(reason, card) {
     return (
-      reason === REASON_WHEN_PLAY &&
+      reason === REASON_AFTER_PLAY &&
       getGameState().cards_played_this_turn.length === 1 &&
       card &&
-      card.type.includes(Card.Type.TREASURE)
+      getType(card).includes(Card.Type.TREASURE)
     );
   }
   async activate(reason, card) {
+    this.not_discard_in_cleanup = false;
+    this.activate_after_play = false;
     let removed = await getPlayField().removeCardById(this.id);
     if (removed) {
       await getDeck().topDeck(this);
@@ -1263,13 +1273,12 @@ class LandingParty extends Card {
   }
 }
 class Mapmaker extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Mapmaker",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.REACTION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_hand = true;
     this.activate_when_another_gains = true;
@@ -1350,7 +1359,7 @@ class Mapmaker extends Card {
     return (
       (reason === REASON_WHEN_ANOTHER_GAIN || reason === REASON_WHEN_GAIN) &&
       card &&
-      card.type.includes(Card.Type.VICTORY)
+      getType(card).includes(Card.Type.VICTORY)
     );
   }
   activate(reason, card) {
@@ -1384,8 +1393,8 @@ class Mapmaker extends Card {
   }
 }
 class Maroon extends Card {
-  constructor(player) {
-    super("Maroon", new Cost(4), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("Maroon", new Cost(4), Card.Type.ACTION, "Plunder/");
   }
   play() {
     if (getHand().getLength() <= 0) return;
@@ -1401,7 +1410,7 @@ class Maroon extends Card {
           chosen += 1;
           await trash_card(card);
 
-          let typeCount = card.type.length;
+          let typeCount = getType(card).length;
           await drawNCards(typeCount * 2);
 
           resolve();
@@ -1412,13 +1421,12 @@ class Maroon extends Card {
   }
 }
 class Rope extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Rope",
       new Cost(4),
       Card.Type.TREASURE + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
@@ -1473,8 +1481,8 @@ class Rope extends Card {
   }
 }
 class SwampShacks extends Card {
-  constructor(player) {
-    super("SwampShacks", new Cost(4), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("SwampShacks", new Cost(4), Card.Type.ACTION, "Plunder/");
   }
   async play() {
     await getBasicStats().addAction(2);
@@ -1484,8 +1492,8 @@ class SwampShacks extends Card {
   }
 }
 class Tools extends Card {
-  constructor(player) {
-    super("Tools", new Cost(4), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("Tools", new Cost(4), Card.Type.TREASURE, "Plunder/");
     this.description = "Gain a copy of a card anyone has in play.";
   }
   play() {
@@ -1522,13 +1530,12 @@ class Tools extends Card {
   }
 }
 class BuriedTreasure extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "BuriedTreasure",
       new Cost(5),
       Card.Type.TREASURE + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = false;
     this.activate_when_start_turn = false;
@@ -1574,13 +1581,12 @@ class BuriedTreasure extends Card {
   }
 }
 class Crew extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Crew",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.activate_when_start_turn = false;
@@ -1606,13 +1612,12 @@ class Crew extends Card {
   }
 }
 class Enlarge extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Enlarge",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
@@ -1649,7 +1654,7 @@ class Enlarge extends Card {
     if (!card) return;
     return new Promise((resolve) => {
       let cost = new Cost(2);
-      cost.addCost(card.cost);
+      cost.addCost(getCost(card));
 
       markSupplyPile(
         function (pile) {
@@ -1676,8 +1681,8 @@ class Enlarge extends Card {
   }
 }
 class Figurine extends Card {
-  constructor(player) {
-    super("Figurine", new Cost(5), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("Figurine", new Cost(5), Card.Type.TREASURE, "Plunder/");
   }
   async play() {
     await drawNCards(2);
@@ -1699,7 +1704,7 @@ class Figurine extends Card {
 
       let contain_action = getHand().mark_cards(
         function (card) {
-          return chosen === 0 && card.type.includes(Card.Type.ACTION);
+          return chosen === 0 && getType(card).includes(Card.Type.ACTION);
         },
         async function (card) {
           clearFunc();
@@ -1721,8 +1726,8 @@ class Figurine extends Card {
   }
 }
 class FirstMate extends Card {
-  constructor(player) {
-    super("FirstMate", new Cost(5), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("FirstMate", new Cost(5), Card.Type.ACTION, "Plunder/");
   }
   async play() {
     if (getHand().getLength() <= 0) return;
@@ -1731,7 +1736,6 @@ class FirstMate extends Card {
     let cardList = [];
     let userCancel = false;
     while (mayPlayAction && !userCancel) {
-      console.log("while");
       await new Promise(async (resolve) => {
         getButtonPanel().clear_buttons();
         setInstruction(
@@ -1759,7 +1763,7 @@ class FirstMate extends Card {
         mayPlayAction = mayPlayCardFromHand(
           function (card) {
             return (
-              card.type.includes(Card.Type.ACTION) &&
+              getType(card).includes(Card.Type.ACTION) &&
               (cardName == null || cardName === card.name)
             );
           },
@@ -1792,19 +1796,18 @@ class FirstMate extends Card {
   }
 }
 class Frigate extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Frigate",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.ATTACK,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = false;
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
 
-    this.activate_when_play = false;
+    this.activate_after_play = false;
     this.turn = -1;
   }
   async play() {
@@ -1819,28 +1822,27 @@ class Frigate extends Card {
     await attack_other(this);
   }
   is_attacked() {
-    //getPlayer().is_attacked_by_frigate = true;
     effectBuffer.addCard(this);
-    this.activate_when_play = true;
+    this.activate_after_play = true;
     this.turn = getPlayer().turn;
   }
   should_activate(reason, card, activity) {
     if (reason === REASON_START_TURN) return true;
-    if (reason !== REASON_WHEN_PLAY) return false;
+    if (reason !== REASON_AFTER_PLAY) return false;
 
-    if (this.turn + 1 !== getPlayer().turn) {
-      this.activate_when_play = false;
+    if (this.turn + 1 < getPlayer().turn) {
+      this.activate_after_play = false;
       effectBuffer.removeCardById(this.id);
       this.turn = -1;
       return false;
     }
-    return card && card.type.includes(Card.Type.ACTION);
+    return card && getType(card).includes(Card.Type.ACTION);
   }
   async activate(reason, card, activity) {
     if (reason === REASON_START_TURN) {
       this.not_discard_in_cleanup = false;
       this.activate_when_start_turn = false;
-    } else if (reason === REASON_WHEN_PLAY) {
+    } else if (reason === REASON_AFTER_PLAY) {
       if (getHand().getLength() <= 4) return;
       getLogger().writeMessage("Player is attacked by Frigate");
       await new Promise((resolve) => {
@@ -1858,8 +1860,8 @@ class Frigate extends Card {
 
         getButtonPanel().add_button("OK", async function () {
           if (chosen < n) return;
-          for (let card of discardList) {
-            await discard_card(card);
+          if (discardList.length > 0) {
+            await discardCardList(discardList);
           }
           clearFunc();
           resolve();
@@ -1881,13 +1883,12 @@ class Frigate extends Card {
   }
 }
 class Longship extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Longship",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
@@ -1910,8 +1911,8 @@ class Longship extends Card {
   }
 }
 class MiningRoad extends Card {
-  constructor(player) {
-    super("MiningRoad", new Cost(5), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("MiningRoad", new Cost(5), Card.Type.ACTION, "Plunder/");
     this.activate_when_in_play = true;
     this.activate_when_gain = true;
     this.turn = -1;
@@ -1927,7 +1928,7 @@ class MiningRoad extends Card {
     return (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.type.includes(Card.Type.TREASURE) &&
+      getType(card).includes(Card.Type.TREASURE) &&
       this.turn !== getPlayer().turn
     );
   }
@@ -1968,14 +1969,14 @@ class MiningRoad extends Card {
   }
 }
 class Pendant extends Card {
-  constructor(player) {
-    super("Pendant", new Cost(5), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("Pendant", new Cost(5), Card.Type.TREASURE, "Plunder/");
   }
   async play() {
     let cardNameList = [];
     for (let card of getPlayField().getCardAll()) {
       if (
-        card.type.includes(Card.Type.TREASURE) &&
+        getType(card).includes(Card.Type.TREASURE) &&
         !cardNameList.includes(card.name)
       ) {
         cardNameList.push(card.name);
@@ -1985,8 +1986,8 @@ class Pendant extends Card {
   }
 }
 class Pilgrim extends Card {
-  constructor(player) {
-    super("Pilgrim", new Cost(5), Card.Type.ACTION, "Plunder/", player);
+  constructor() {
+    super("Pilgrim", new Cost(5), Card.Type.ACTION, "Plunder/");
   }
   async play() {
     await drawNCards(4);
@@ -2014,13 +2015,12 @@ class Pilgrim extends Card {
   }
 }
 class Quartermaster extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Quartermaster",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_in_play = true;
     this.not_discard_in_cleanup = false;
@@ -2118,8 +2118,8 @@ class Quartermaster extends Card {
   }
 }
 class SilverMine extends Card {
-  constructor(player) {
-    super("SilverMine", new Cost(5), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("SilverMine", new Cost(5), Card.Type.TREASURE, "Plunder/");
   }
   play() {
     return new Promise((resolve) => {
@@ -2136,7 +2136,7 @@ class SilverMine extends Card {
           return (
             pile.getQuantity() > 0 &&
             pile.getType().includes(Card.Type.TREASURE) &&
-            this.cost.isGreaterThan(pile.getCost())
+            getCost(this).isGreaterThan(pile.getCost())
           );
         }.bind(this),
         async function (pile) {
@@ -2150,22 +2150,23 @@ class SilverMine extends Card {
   }
 }
 class Trickster extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Trickster",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.ATTACK,
-      "Plunder/",
-      player
+      "Plunder/"
     );
     this.activate_when_discard_from_play = false;
     this.activate_when_end_turn = false;
+    this.activate_when_end_your_turn = false;
     this.chosen_id = null;
     this.turn = -1;
   }
   async play() {
     this.activate_when_discard_from_play = true;
     this.activate_when_end_turn = false;
+    this.activate_when_end_your_turn = false;
     this.turn = getPlayer().turn;
     effectBuffer.addCard(this);
     await this.attack();
@@ -2181,6 +2182,7 @@ class Trickster extends Card {
       effectBuffer.removeCardById(this.id);
       this.activate_when_discard_from_play = false;
       this.activate_when_end_turn = false;
+      this.activate_when_end_your_turn = false;
       this.chosen_id = null;
       this.turn = -1;
       return false;
@@ -2189,8 +2191,9 @@ class Trickster extends Card {
       (reason === REASON_WHEN_DISCARD_FROM_PLAY &&
         this.chosen_id == null &&
         card &&
-        card.type.includes(Card.Type.TREASURE)) ||
-      (reason === REASON_END_TURN && this.chosen_id)
+        getType(card).includes(Card.Type.TREASURE)) ||
+      ((reason === REASON_END_TURN || reason === REASON_END_YOUR_TURN) &&
+        this.chosen_id)
     );
   }
   async activate(reason, card) {
@@ -2213,6 +2216,7 @@ class Trickster extends Card {
               await set_aside_card(card);
               this.activate_when_discard_from_play = false;
               this.activate_when_end_turn = true;
+              this.activate_when_end_your_turn = true;
               this.chosen_id = card.id;
             }
             resolve();
@@ -2223,8 +2227,9 @@ class Trickster extends Card {
           resolve();
         });
       });
-    } else if (reason === REASON_END_TURN) {
+    } else if (reason === REASON_END_TURN || reason === REASON_END_YOUR_TURN) {
       this.activate_when_end_turn = false;
+      this.activate_when_end_your_turn = false;
       effectBuffer.removeCardById(this.id);
       let chosenCard = await getSetAside().removeCardById(this.chosen_id);
       if (!chosenCard) return;
@@ -2235,8 +2240,8 @@ class Trickster extends Card {
   }
 }
 class KingsCache extends Card {
-  constructor(player) {
-    super("KingsCache", new Cost(7), Card.Type.TREASURE, "Plunder/", player);
+  constructor() {
+    super("KingsCache", new Cost(7), Card.Type.TREASURE, "Plunder/");
   }
   play() {
     if (getHand().getLength() <= 0) return;
@@ -2257,7 +2262,7 @@ class KingsCache extends Card {
 
       let contain_treasure = getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.TREASURE) && chosen < 1;
+          return getType(card).includes(Card.Type.TREASURE) && chosen < 1;
         },
         async function (card) {
           chosen += 1;

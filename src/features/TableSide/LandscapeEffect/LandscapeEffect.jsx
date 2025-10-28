@@ -1,7 +1,7 @@
 import React from "react";
 import { showCard } from "../../../Components/display_helper/CardDisplay";
 
-let cardList = [];
+let componentList = [];
 
 class LandscapeEffect extends React.Component{
     constructor(props){
@@ -13,6 +13,7 @@ class LandscapeEffect extends React.Component{
             onClick: null,
             victory_token: 0,
             debt_token: 0,
+            sun_token: 0,
         } 
         addLandscapeEffect(this);
     }
@@ -58,6 +59,22 @@ class LandscapeEffect extends React.Component{
     getDebtToken(){
         return this.state.debt_token;
     }
+    setSunToken(value){
+        return new Promise(resolve =>{
+            this.setState(
+                prevState => ({
+                    sun_token: value>0?value:0,
+                }),
+                resolve
+            );
+        })
+    }
+    async removeSunToken(value){
+        await this.setSunToken(this.state.sun_token - value);
+    }
+    getSunToken(){
+        return this.state.sun_token;
+    }
     markSelf(callback){
         this.setState(prevState =>({
             canSelect: true,
@@ -91,6 +108,8 @@ class LandscapeEffect extends React.Component{
                 {landscapeCard.chosen_pile_name 
                     && <div>{landscapeCard.chosen_pile_name}</div>
                 }
+                {this.state.sun_token > 0 
+                        && <div className='sun-token'>{this.state.sun_token}</div>}
 
             </div>
 
@@ -101,13 +120,16 @@ class LandscapeEffect extends React.Component{
             effectCard: this.props.effectCard.createMockObject(),
             victory_token: this.state.victory_token,
             debt_token:this.state.debt_token,
+            sun_token: this.state.sun_token,
         };
     }
     parseDataFromMockObject(mockObj){
     }
     parseDataFromMockObjectGeneral(mockObj){ 
         if(!mockObj|| !mockObj.name|| mockObj.name !== this.getName() 
-            || !mockObj.effectCard || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
+            || !mockObj.effectCard || mockObj.victory_token == undefined 
+            || mockObj.debt_token == undefined || mockObj.sun_token == undefined
+        ){
             console.error(mockObj);
             throw new Error('INVALID Mock Landscape Effect');
         }
@@ -116,13 +138,16 @@ class LandscapeEffect extends React.Component{
             this.setState(prevState =>({
                 victory_token: mockObj.victory_token,
                 debt_token: mockObj.debt_token,
+                sun_token: mockObj.sun_token,
             }), 
             resolve);
         });
     }
     parseDataFromMockObjectOwn(mockObj){
         if(!mockObj || !mockObj.name || mockObj.name !== this.getName()
-            || !mockObj.effectCard || mockObj.victory_token == undefined || mockObj.debt_token == undefined){
+            || !mockObj.effectCard || mockObj.victory_token == undefined 
+            || mockObj.debt_token == undefined || mockObj.sun_token == undefined
+        ){
             throw new Error('INVALID Mock Landscape Effect');
         }
         this.props.effectCard.parseDataFromMockObjectOwn(mockObj.effectCard);
@@ -130,6 +155,7 @@ class LandscapeEffect extends React.Component{
             this.setState(prevState =>({
                 victory_token: mockObj.victory_token,
                 debt_token: mockObj.debt_token,
+                sun_token: mockObj.sun_token,
             }), 
             resolve);
         });
@@ -138,15 +164,15 @@ class LandscapeEffect extends React.Component{
 }
 
 function addLandscapeEffect(card){
-    cardList.push(card);
+    componentList.push(card);
 }
 
 function findLandscapeEffect(callback){
-    return cardList.find(callback);
+    return componentList.find(callback);
 }
 function findLandscapeEffectAll(callback){
     let array = [];
-    for(let card of cardList){
+    for(let card of componentList){
         if(callback(card)){
             array.push(card);
         }

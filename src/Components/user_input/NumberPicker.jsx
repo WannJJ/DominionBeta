@@ -21,12 +21,12 @@ class NumberPicker extends React.Component{
             onSubmitFunction: callback,
         }))
     }
-    onSubmit(e){
+    async onSubmit(e){
         e.preventDefault();
         if(this.state.onSubmitFunction == null) return;
 
 
-        this.state.onSubmitFunction(this.state.quantity);
+        await this.state.onSubmitFunction(this.state.quantity);
         this.hide();
     }
     setValue(value){

@@ -32,6 +32,9 @@ import {
   receiveBoonAsBlessedVillage,
   setAsideTop3Boons,
   receiveBoonAsDruid,
+  receiveBoonAsSacredGroveOther,
+  trashCardList,
+  discardCardList,
 } from "../../game_logic/Activity.js";
 import { getBasicStats } from "../../features/PlayerSide/PlayerSide.jsx";
 import { getButtonPanel } from "../../features/PlayerSide/ButtonPanel.jsx";
@@ -43,6 +46,8 @@ import {
   effectBuffer,
   REASON_FIRST_WHEN_ANOTHER_PLAYS,
   REASON_START_CLEANUP,
+  REASON_WHEN_DISCARD,
+  REASON_END_YOUR_TURN,
 } from "../../game_logic/ReactionEffectManager.js";
 import {
   Lost_in_the_Woods,
@@ -61,19 +66,21 @@ import { findNonSupplyPile } from "../../features/TableSide/NonSupplyPile.jsx";
 import { stateHolder } from "./HexBoonManager.js";
 import { PHASE_CLEAN_UP, PHASE_NIGHT } from "../../utils/constants.js";
 import { setInstruction } from "../../features/PlayerSide/Instruction.jsx";
+import { opponentManager } from "../../features/OpponentSide/Opponent.js";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 /*
 Mẫu
 class  extends Card{
-    constructor(player){
-        super("", , Card.Type.NIGHT, "Nocturne/", player);
+    constructor(){
+        super("", , Card.Type.NIGHT, "Nocturne/");
     }
     play(){} 
 }
 */
 
 class Bat extends Card {
-  constructor(player) {
-    super("Bat", new Cost(2), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("Bat", new Cost(2), Card.Type.NIGHT, "Nocturne/");
   }
   getInitAmount() {
     return 10;
@@ -93,10 +100,7 @@ class Bat extends Card {
           "Confirm Trashing",
           async function () {
             if (this.card_list.length > 0) {
-              for (let i = 0; i < this.card_list.length; i++) {
-                let card = this.card_list[i];
-                await trash_card(card);
-              }
+              await trashCardList(this.card_list);
             }
             if (this.chosen > 0) {
               //Exchange
@@ -140,8 +144,8 @@ class Bat extends Card {
   }
 }
 class Changeling extends Card {
-  constructor(player) {
-    super("Changeling", new Cost(3), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("Changeling", new Cost(3), Card.Type.NIGHT, "Nocturne/");
     this.activate_when_gain = true;
     this.description =
       "In games using this, when you gain a card costing $3 or more, you may exchange it for a Changeling";
@@ -182,7 +186,7 @@ class Changeling extends Card {
     return (
       reason === REASON_WHEN_GAIN &&
       card &&
-      card.cost.isGreaterOrEqual(cost) &&
+      getCost(card).isGreaterOrEqual(cost) &&
       changelingPile &&
       cardPile
     );
@@ -238,13 +242,12 @@ class Changeling extends Card {
   }
 }
 class Cobbler extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Cobbler",
       new Cost(5),
       Card.Type.NIGHT + " " + Card.Type.DURATION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -270,7 +273,7 @@ class Cobbler extends Card {
         function (pile) {
           let cost = new Cost(4);
           return (
-            cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity() > 0
+            pile.getQuantity() > 0 && cost.isGreaterOrEqual(pile.getCost())
           );
         },
         async function (pile) {
@@ -283,13 +286,12 @@ class Cobbler extends Card {
   }
 }
 class Crypt extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Crypt",
       new Cost(5),
       Card.Type.NIGHT + " " + Card.Type.DURATION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.chosen_id_list = [];
     this.not_discard_in_cleanup = false;
@@ -331,8 +333,8 @@ class Crypt extends Card {
       let is_marked = getPlayField().mark_cards(
         function (card) {
           return (
-            card.type.includes(Card.Type.TREASURE) &&
-            !card.type.includes(Card.Type.DURATION)
+            getType(card).includes(Card.Type.TREASURE) &&
+            !getType(card).includes(Card.Type.DURATION)
           );
         },
         function (card) {
@@ -396,13 +398,12 @@ class Crypt extends Card {
   }
 }
 class Den_of_Sin extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Den_of_Sin",
       new Cost(5),
       Card.Type.NIGHT + " " + Card.Type.DURATION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -425,8 +426,8 @@ class Den_of_Sin extends Card {
   }
 }
 class DevilsWorkshop extends Card {
-  constructor(player) {
-    super("DevilsWorkshop", new Cost(4), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("DevilsWorkshop", new Cost(4), Card.Type.NIGHT, "Nocturne/");
   }
   async play() {
     switch (getGameState().cards_gained_this_turn.length) {
@@ -439,7 +440,7 @@ class DevilsWorkshop extends Card {
             function (pile) {
               let cost = new Cost(4);
               return (
-                cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity() > 0
+                pile.getQuantity() > 0 && cost.isGreaterOrEqual(pile.getCost())
               );
             },
             async function (pile) {
@@ -455,8 +456,8 @@ class DevilsWorkshop extends Card {
   }
 }
 class Exorcist extends Card {
-  constructor(player) {
-    super("Exorcist", new Cost(4), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("Exorcist", new Cost(4), Card.Type.NIGHT, "Nocturne/");
     this.description =
       "Trash a card from your hand. Gain a cheaper Spirit from one of the Spirit piles.";
   }
@@ -469,7 +470,7 @@ class Exorcist extends Card {
           await trash_card(card);
           await getHand().remove_mark();
 
-          await this.play_step1(card.cost);
+          await this.play_step1(getCost(card));
           resolve("Exorcist finish");
         }.bind(this),
         "trash"
@@ -501,13 +502,12 @@ class Exorcist extends Card {
   }
 }
 class GhostTown extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "GhostTown",
       new Cost(3),
       Card.Type.NIGHT + " " + Card.Type.DURATION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -531,13 +531,12 @@ class GhostTown extends Card {
   }
 }
 class Ghost extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Ghost",
       new Cost(4),
       Card.Type.NIGHT + " " + Card.Type.DURATION + " " + Card.Type.SPIRIT,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.chosen_id = null;
     this.not_discard_in_cleanup = false;
@@ -555,7 +554,7 @@ class Ghost extends Card {
     let card_list = [];
     while (getDeck().length() > 0) {
       let card = await getDeck().pop();
-      if (card.type.includes(Card.Type.ACTION)) {
+      if (getType(card).includes(Card.Type.ACTION)) {
         this.chosen_id = card.id;
         await set_aside_card(card);
         this.not_discard_in_cleanup = true;
@@ -568,9 +567,9 @@ class Ghost extends Card {
       if (getDeck().getLength() === 0 && getDiscard().getLength() > 0)
         await mix_discard_to_deck();
     }
-    while (card_list.length > 0) {
-      let card = card_list.pop();
-      await discard_card(card, false);
+
+    if (card_list.length > 0) {
+      await discardCardList(card_list, false);
     }
   }
   should_activate(reason, card) {
@@ -587,13 +586,12 @@ class Ghost extends Card {
   }
 }
 class Guardian extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Guardian",
       new Cost(2),
       Card.Type.DURATION + " " + Card.Type.NIGHT,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -612,7 +610,7 @@ class Guardian extends Card {
       reason === REASON_START_TURN ||
       (reason === REASON_FIRST_WHEN_ANOTHER_PLAYS &&
         card &&
-        card.type.includes(Card.Type.ATTACK))
+        getType(card).includes(Card.Type.ATTACK))
     );
   }
   async activate(reason, card) {
@@ -627,8 +625,8 @@ class Guardian extends Card {
   }
 }
 class Monastery extends Card {
-  constructor(player) {
-    super("Monastery", new Cost(2), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("Monastery", new Cost(2), Card.Type.NIGHT, "Nocturne/");
   }
   async play() {
     this.n = getGameState().cards_gained_this_turn.length;
@@ -692,8 +690,8 @@ class Monastery extends Card {
   }
 }
 class NightWatchman extends Card {
-  constructor(player) {
-    super("NightWatchman", new Cost(3), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("NightWatchman", new Cost(3), Card.Type.NIGHT, "Nocturne/");
     this.description =
       "Look at the top 5 cards of your deck, discard any number, and put the rest back in any order.This is gained to your hand (instead of your discard pile).";
   }
@@ -798,13 +796,12 @@ class NightWatchman extends Card {
   is_gained() {}
 }
 class Raider extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Raider",
       new Cost(6),
       Card.Type.NIGHT + " " + Card.Type.DURATION + " " + Card.Type.ATTACK,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -860,8 +857,8 @@ class Raider extends Card {
   }
 }
 class Vampire extends Card {
-  constructor(player) {
-    super("Vampire", new Cost(5), Card.Type.NIGHT, "Nocturne/", player);
+  constructor() {
+    super("Vampire", new Cost(5), Card.Type.NIGHT, "Nocturne/");
   }
   play() {
     return new Promise((resolve) => {
@@ -869,8 +866,8 @@ class Vampire extends Card {
         function (pile) {
           let cost = new Cost(5);
           return (
-            cost.isGreaterOrEqual(pile.getCost()) &&
             pile.getQuantity() > 0 &&
+            cost.isGreaterOrEqual(pile.getCost()) &&
             pile.getName() !== "Vampire"
           );
         },
@@ -907,13 +904,12 @@ class Vampire extends Card {
   }
 }
 class Werewolf extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Werewolf",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.NIGHT} ${Card.Type.ATTACK} ${Card.Type.DOOM}`,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -932,8 +928,8 @@ class Werewolf extends Card {
 }
 
 class Wish extends Card {
-  constructor(player) {
-    super("Wish", new Cost(0), Card.Type.ACTION, "Nocturne/NonSupply/", player);
+  constructor() {
+    super("Wish", new Cost(0), Card.Type.ACTION, "Nocturne/NonSupply/");
   }
   getInitAmount() {
     return 12;
@@ -953,7 +949,7 @@ class Wish extends Card {
           function (pile) {
             let cost = new Cost(6);
             return (
-              cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity() > 0
+              pile.getQuantity() > 0 && cost.isGreaterOrEqual(pile.getCost())
             );
           },
           async function (pile) {
@@ -967,13 +963,12 @@ class Wish extends Card {
   }
 }
 class Will_o_Wisp extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Will_o_Wisp",
       new Cost(0),
       Card.Type.ACTION + " " + Card.Type.SPIRIT,
-      "Nocturne/NonSupply/",
-      player
+      "Nocturne/NonSupply/"
     );
   }
   getInitAmount() {
@@ -989,20 +984,19 @@ class Will_o_Wisp extends Card {
     if (getDeck().getLength() <= 0) return;
     let card = getDeck().getCardAll()[getDeck().getLength() - 1];
     await reveal_card(card);
-    if (card.cost.getCoin() <= 2) {
+    if (getCost(card).getCoin() <= 2) {
       card = await getDeck().getCardAll().pop();
       await getHand().addCard(card);
     }
   }
 }
 class Imp extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Imp",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.SPIRIT,
-      "Nocturne/NonSupply/",
-      player
+      "Nocturne/NonSupply/"
     );
   }
   getInitAmount() {
@@ -1010,7 +1004,6 @@ class Imp extends Card {
   }
   async play() {
     await drawNCards(2);
-    //if(!getHand().has_card(card => card.type.includes(Card.Type.ACTION))) return;
     return new Promise(async (resolve) => {
       let clearFunc = async function () {
         await getHand().remove_mark();
@@ -1026,7 +1019,7 @@ class Imp extends Card {
       let mayPlayAction = mayPlayCardFromHand(
         function (card) {
           return (
-            card.type.includes(Card.Type.ACTION) &&
+            getType(card).includes(Card.Type.ACTION) &&
             !getPlayField().has_card((c) => c.name === card.name)
           );
         },
@@ -1042,18 +1035,6 @@ class Imp extends Card {
         resolve();
       }
 
-      /*
-            getHand().mark_cards(
-                function(card){
-                    return card.type.includes(Card.Type.ACTION) && !getPlayField().has_card(c => c.name === card.name);
-                }, 
-                async function(card){
-                    await clearFunc();
-                    await getHand().remove(card);
-                    await play_card(card);
-                    resolve('Imp finish');
-                });
-            */
       getButtonPanel().clear_buttons();
       getButtonPanel().add_button("Don't play", async function () {
         await clearFunc();
@@ -1063,13 +1044,12 @@ class Imp extends Card {
   }
 }
 class ZombieApprentice extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "ZombieApprentice",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.ZOMBIE,
-      "Nocturne/NonSupply/",
-      player
+      "Nocturne/NonSupply/"
     );
   }
   play() {
@@ -1085,7 +1065,7 @@ class ZombieApprentice extends Card {
         clearFunc();
       });
       let is_marked = getHand().mark_cards(
-        (c) => c.type.includes(Card.Type.ACTION),
+        (c) => getType(c).includes(Card.Type.ACTION),
         async function (card) {
           await trash_card(card);
           await drawNCards(3);
@@ -1102,13 +1082,12 @@ class ZombieApprentice extends Card {
   }
 }
 class ZombieMason extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "ZombieMason",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.ZOMBIE,
-      "Nocturne/NonSupply/",
-      player
+      "Nocturne/NonSupply/"
     );
   }
   async play() {
@@ -1118,7 +1097,7 @@ class ZombieMason extends Card {
     let topCard = await getDeck().pop();
     if (topCard) {
       await trash_card(topCard, false);
-      await this.play_step1(topCard.cost);
+      await this.play_step1(getCost(topCard));
     }
   }
   play_step1(card_cost) {
@@ -1155,13 +1134,12 @@ class ZombieMason extends Card {
   }
 }
 class ZombieSpy extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "ZombieSpy",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.ZOMBIE,
-      "Nocturne/NonSupply/",
-      player
+      "Nocturne/NonSupply/"
     );
   }
   async play() {
@@ -1200,13 +1178,12 @@ class ZombieSpy extends Card {
 
 //DOOM Cards
 class Leprechaun extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Leprechaun",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DOOM,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -1220,13 +1197,12 @@ class Leprechaun extends Card {
 }
 
 class Skulk extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Skulk",
       new Cost(4),
       `${Card.Type.ACTION} ${Card.Type.ATTACK} ${Card.Type.DOOM}`,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -1242,13 +1218,12 @@ class Skulk extends Card {
   }
 }
 class CursedVillage extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "CursedVillage",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DOOM,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -1268,13 +1243,12 @@ class CursedVillage extends Card {
   }
 }
 class Tormentor extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Tormentor",
       new Cost(5),
       `${Card.Type.ACTION} ${Card.Type.ATTACK} ${Card.Type.DOOM}`,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -1298,13 +1272,12 @@ class Tormentor extends Card {
 
 //FATE Cards
 class Druid extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Druid",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "Receive one of the set-aside Boons (leaving it there).Setup: Set aside the top 3 Boons face up.";
@@ -1313,6 +1286,7 @@ class Druid extends Card {
     await setAsideTop3Boons();
   }
   async play() {
+    //TODO: Druid when play Rivers Gift
     await getBasicStats().addCoin(2);
 
     let druidBoonPile = findNonSupplyPile(
@@ -1339,13 +1313,12 @@ class Druid extends Card {
   }
 }
 class Pixie extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Pixie",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "Discard the top Boon. You may trash this to receive that Boon twice.Heirloom: Goat";
@@ -1390,13 +1363,12 @@ class Pixie extends Card {
 }
 
 class Tracker extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Tracker",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.activate_when_gain = false;
     this.activate_when_in_play = false;
@@ -1438,19 +1410,17 @@ class Tracker extends Card {
   }
 }
 class Fool extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Fool",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "If you aren't the player with Lost in the Woods: take it, take 3 Boons, and receive the Boons in any order. Heirloom: Lucky Coin";
   }
   async play() {
-    //TODO
     if (!stateHolder.has_card((c) => c.name === "Lost_in_the_Woods")) {
       await receive_state(new Lost_in_the_Woods());
       await receive_boon();
@@ -1466,13 +1436,12 @@ class Fool extends Card {
   }
 }
 class Bard extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Bard",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
   }
   async play() {
@@ -1481,13 +1450,12 @@ class Bard extends Card {
   }
 }
 class BlessedVillage extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "BlessedVillage",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "When you gain this, take a Boon. Receive it now or at the start of your next turn.";
@@ -1536,13 +1504,12 @@ class BlessedVillage extends Card {
   }
 }
 class Idol extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Idol",
       new Cost(5),
       Card.Type.TREASURE + " " + Card.Type.ATTACK + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "If you have an odd number of Idols in play (counting this), receive a Boon; otherwise, each other player gains a Curse.";
@@ -1568,13 +1535,12 @@ class Idol extends Card {
 class SacredGrove extends Card {
   static MESSAGE = "+1Coin";
   static RESPONSE = "Response";
-  constructor(player) {
+  constructor() {
     super(
       "SacredGrove",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.FATE,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.description =
       "Receive a Boon. If it doesn't give +$1, each other player may receive it.";
@@ -1584,75 +1550,120 @@ class SacredGrove extends Card {
     await getBasicStats().addCoin(3);
     let new_boon = await receive_boon();
     if (!new_boon) return;
-    if (!["TheFieldsGift", "TheForestsGift"].includes(new_boon.name)) {
-      await message_other(this, SacredGrove.MESSAGE);
+    let boonName = new_boon.name;
+    if (!["TheFieldsGift", "TheForestsGift"].includes(boonName)) {
+      for (let opponent of opponentManager.getOpponentList()) {
+        await message_other(this, boonName, opponent.username);
+      }
     }
   }
-  async receive_message(message) {
-    //TODO: Lam sai roi.
-    await getBasicStats().addCoin(1);
-    return SacredGrove.RESPONSE;
+  receive_message(boonName) {
+    //TODO: ket hop voi river gift bi sai.
+    return new Promise((resolve) => {
+      let clearFunc = function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+      };
+      getButtonPanel().clear_buttons();
+      setInstruction(`SacredGrove: You may receive ${boonName}.`);
+
+      getButtonPanel().add_button("Receive", async function () {
+        clearFunc();
+        await receiveBoonAsSacredGroveOther(boonName);
+        resolve(SacredGrove.RESPONSE);
+      });
+      getButtonPanel().add_button("Decline", function () {
+        clearFunc();
+        resolve(SacredGrove.RESPONSE);
+      });
+    });
   }
 }
 
 //Normal cards
 class FaithfulHound extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "FaithfulHound",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.REACTION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
-    this.activate_when_in_play = true;
-    this.activate_when_end_turn = true;
+    this.activate_when_end_turn = false;
+    this.activate_when_end_your_turn = false;
+
+    this.activate_when_discard = true;
     this.description =
       "When you discard this other than during Clean-up, you may set it aside, and put it into your hand at end of turn.";
   }
   async play() {
-    //TODO: Test
+    //TODO: At the end of turn (not only your turn)
     await drawNCards(2);
   }
-  is_discarded() {
+
+  should_activate(reason, card) {
+    return (
+      reason === REASON_END_TURN ||
+      reason === REASON_END_YOUR_TURN ||
+      (reason === REASON_WHEN_DISCARD &&
+        card &&
+        card.id === this.id &&
+        getPlayer().phase !== PHASE_CLEAN_UP)
+    );
+  }
+  async activate(reason, card) {
+    if (reason === REASON_END_TURN || reason === REASON_END_YOUR_TURN) {
+      this.activate_when_end_turn = false;
+      this.activate_when_end_your_turn = false;
+      let removed = await getSetAside().removeCardById(this.id);
+      if (removed) {
+        await getHand().addCard(this);
+      }
+      effectBuffer.removeCardById(this.id);
+    } else if (reason === REASON_WHEN_DISCARD) {
+      await this.activate_step1();
+    }
+  }
+  activate_step1() {
     if (getPlayer().phase === PHASE_CLEAN_UP) return;
     return new Promise((resolve) => {
+      let clearFunc = function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+      };
       getButtonPanel().clear_buttons();
+      setInstruction(
+        `${this.name}: You may set this aside, and put into hand at the end of turn.`
+      );
+
       getButtonPanel().add_button(
-        "Set aside FaithfulHound",
+        "Set aside",
         async function () {
+          clearFunc();
           let removed = await getDiscard().removeCardById(this.id);
           if (removed) {
             await set_aside_card(this);
+            effectBuffer.addCard(this);
+            this.activate_when_end_turn = true;
+            this.activate_when_end_your_turn = true;
           }
-          getButtonPanel().clear_buttons();
           resolve();
         }.bind(this)
       );
       getButtonPanel().add_button("Cancel", function () {
-        getButtonPanel().clear_buttons();
+        clearFunc();
         resolve();
       });
     });
   }
-  should_activate(reason, card) {
-    return reason === REASON_END_TURN;
-  }
-  async ativate(reason, card) {
-    let removed = await getSetAside().removeCardById(this.id);
-    if (removed) {
-      await getHand().addCard(this);
-    }
-  }
 }
 class SecretCave extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "SecretCave",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Nocturne/",
-      player
+      "Nocturne/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = true;
@@ -1681,9 +1692,8 @@ class SecretCave extends Card {
           chosen += 1;
           card_list.push(card);
           if (chosen === 3 && card_list.length === 3) {
-            while (card_list.length > 0) {
-              let c = card_list.pop();
-              await discard_card(c);
+            if (card_list.length > 0) {
+              await discardCardList(card_list);
             }
             this.not_discard_in_cleanup = true;
             await clearFunc();
@@ -1703,8 +1713,8 @@ class SecretCave extends Card {
   }
 }
 class Cemetery extends Card {
-  constructor(player) {
-    super("Cemetery", new Cost(4), Card.Type.VICTORY, "Nocturne/", player);
+  constructor() {
+    super("Cemetery", new Cost(4), Card.Type.VICTORY, "Nocturne/");
   }
   play() {}
   async add_score() {
@@ -1724,10 +1734,7 @@ class Cemetery extends Card {
         "Confirm Trashing",
         async function () {
           if (this.card_list.length > 0) {
-            for (let i = 0; i < this.card_list.length; i++) {
-              let card = this.card_list[i];
-              await trash_card(card);
-            }
+            await trashCardList(this.card_list);
           }
           await clearFunc();
           resolve("Cemetery finish");
@@ -1753,12 +1760,13 @@ class Cemetery extends Card {
   }
 }
 class Conclave extends Card {
-  constructor(player) {
-    super("Conclave", new Cost(4), Card.Type.ACTION, "Nocturne/", player);
+  constructor() {
+    super("Conclave", new Cost(4), Card.Type.ACTION, "Nocturne/");
   }
   async play() {
     await getBasicStats().addCoin(2);
-    if (!getHand().has_card((c) => c.type.includes(Card.Type.ACTION))) return;
+    if (!getHand().has_card((c) => getType(c).includes(Card.Type.ACTION)))
+      return;
     return new Promise(async (resolve) => {
       let clearFunc = async function () {
         getButtonPanel().clear_buttons();
@@ -1782,7 +1790,7 @@ class Conclave extends Card {
       let mayPlayAction = mayPlayCardFromHand(
         function (card) {
           return (
-            card.type.includes(Card.Type.ACTION) &&
+            getType(card).includes(Card.Type.ACTION) &&
             !getPlayField().has_card((c) => c.name === card.name)
           );
         },
@@ -1799,34 +1807,12 @@ class Conclave extends Card {
         await clearFunc();
         resolve();
       }
-
-      /*
-            let is_marked = getHand().mark_cards(
-                function(card){
-                    return card.type.includes(Card.Type.ACTION) && !getPlayField().has_card(c => c.name === card.name);
-                },
-                async function(card){
-                    await clearFunc();
-                    await getHand().remove(card);
-                    await play_card(card);
-                    await getBasicStats().addAction(1);
-
-                    resolve('Conclave finish');
-                },
-                'choose',
-            );
-
-            if(!is_marked){
-                await clearFunc();
-                resolve();
-            }
-            */
     });
   }
 }
 class Necromancer extends Card {
-  constructor(player) {
-    super("Necromancer", new Cost(4), Card.Type.ACTION, "Nocturne/", player);
+  constructor() {
+    super("Necromancer", new Cost(4), Card.Type.ACTION, "Nocturne/");
     this.chosen_id_list = [];
     this.activate_when_in_play = false;
     this.activate_when_start_cleanup = false;
@@ -1854,8 +1840,8 @@ class Necromancer extends Card {
       let is_marked = supportHand.mark_cards(
         function (card) {
           return (
-            card.type.includes(Card.Type.ACTION) &&
-            !card.type.includes(Card.Type.DURATION) &&
+            getType(card).includes(Card.Type.ACTION) &&
+            !getType(card).includes(Card.Type.DURATION) &&
             !card.is_face_down
           );
         },
@@ -1904,8 +1890,8 @@ class Necromancer extends Card {
   }
 }
 class Shepherd extends Card {
-  constructor(player) {
-    super("Shepherd", new Cost(4), Card.Type.ACTION, "Nocturne/", player);
+  constructor() {
+    super("Shepherd", new Cost(4), Card.Type.ACTION, "Nocturne/");
   }
   async play() {
     await getBasicStats().addAction(1);
@@ -1921,17 +1907,15 @@ class Shepherd extends Card {
       getButtonPanel().clear_buttons();
       getButtonPanel().add_button("OK", async function () {
         await clearFunc();
-        while (card_list.length > 0) {
-          let card = card_list.pop();
-          await discard_card(card);
-          await draw1();
-          await draw1();
+        if (card_list.length > 0) {
+          await discardCardList(card_list);
+          await drawNCards(2 * card_list.length);
         }
         resolve();
       });
 
       let is_marked = getHand().mark_cards(
-        (c) => c.type.includes(Card.Type.VICTORY),
+        (c) => getType(c).includes(Card.Type.VICTORY),
         function (card) {
           card_list.push(card);
         },
@@ -1945,8 +1929,8 @@ class Shepherd extends Card {
   }
 }
 class Pooka extends Card {
-  constructor(player) {
-    super("Pooka", new Cost(5), Card.Type.ACTION, "Nocturne/", player);
+  constructor() {
+    super("Pooka", new Cost(5), Card.Type.ACTION, "Nocturne/");
   }
   async play() {
     return new Promise(async (resolve) => {
@@ -1967,7 +1951,7 @@ class Pooka extends Card {
       });
       let is_marked = getHand().mark_cards(
         (c) =>
-          c.type.includes(Card.Type.TREASURE) &&
+          getType(c).includes(Card.Type.TREASURE) &&
           c.name !== "CursedGold" &&
           chosen === 0,
         async function (card) {
@@ -1990,8 +1974,8 @@ class Pooka extends Card {
   }
 }
 class TragicHero extends Card {
-  constructor(player) {
-    super("TragicHero", new Cost(5), Card.Type.ACTION, "Nocturne/", player);
+  constructor() {
+    super("TragicHero", new Cost(5), Card.Type.ACTION, "Nocturne/");
   }
   async play() {
     await drawNCards(3);

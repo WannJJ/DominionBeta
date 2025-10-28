@@ -1,28 +1,16 @@
+import { PlayerProfile } from "../game_logic/PlayerProfile";
+
 class RootCard {
   static id = 0;
   static ignoreCount = 0;
-  constructor(
-    name = "",
-    cost = new Cost(),
-    type = [],
-    expansion = "",
-    player = null
-  ) {
+  constructor(name = "", cost = new Cost(), type = [], expansion = "") {
     this.name = name;
     this.cost = cost;
     this.type = type;
     this.src = "./img/" + expansion + name + ".JPG";
-    this.player = player;
-    this.id = RootCard.id++;
+    this.id = `${PlayerProfile.getOrdinalNumber()}#${RootCard.id++}`;
 
     this.description = "";
-    /*
-        this.name = '';
-        this.cost = null;
-        this.type = [];
-        this.src = null;
-        this.player = null;
-        */
 
     this.turn = -1;
     this.is_selected = false;
@@ -36,6 +24,7 @@ class RootCard {
     this.activate_when_end_buy_phase = false;
     this.activate_when_start_cleanup = false;
     this.activate_when_end_turn = false;
+    this.activate_when_end_your_turn = false;
     this.activate_when_end_game = false;
 
     //Player or another player's activity to be activated
@@ -43,7 +32,10 @@ class RootCard {
     this.activate_when_another_gains = false;
     this.activate_first_when_another_plays = false;
 
+    this.activate_first_when_play = false;
     this.activate_when_play = false;
+    this.activate_on_play = false;
+    this.activate_after_play = false;
     this.activate_when_gain = false;
     this.activate_when_discard = false;
     this.activate_when_trash = false;
@@ -62,6 +54,13 @@ class RootCard {
     this.chosen_id_list = []; // Prepare, Deliver
     this.chosen_name = ""; // Blockade, Gatekeeper
   }
+  getCost() {
+    return this.cost;
+  }
+  getType() {
+    return this.type;
+  }
+  getCardBack() {}
   setup() {}
   getInitAmount() {}
   setPlayer(player) {
@@ -78,6 +77,14 @@ class RootCard {
   } // Unneccessary, should_activate never check for cardLocation
   activate(reason, card, activity, cardLocationTrack) {}
   receive_message(message) {}
+  analyseCardCost(card, tempCost) {
+    console.error(card.name);
+    throw new Error();
+  }
+  analyseCardType(card, tempType) {
+    console.error(this.name, card.name);
+    throw new Error("");
+  }
 
   createMockObject(ignoreActivateCondition = false) {
     let mockObj = {
@@ -100,13 +107,17 @@ class RootCard {
         awebp: this.activate_when_end_buy_phase,
         awscu: this.activate_when_start_cleanup,
         awet: this.activate_when_end_turn,
+        awdyt: this.activate_when_end_your_turn,
         aweg: this.activate_when_end_game,
 
         awaa: this.activate_when_another_attacks,
         awag: this.activate_when_another_gains,
         afwap: this.activate_first_when_another_plays,
 
+        afwpplay: this.activate_first_when_play,
         awplay: this.activate_when_play,
+        aoplay: this.activate_on_play,
+        afplay: this.activate_after_play,
         awgain: this.activate_when_gain,
         awdiscard: this.activate_when_discard,
         awtrash: this.activate_when_trash,
@@ -133,6 +144,8 @@ class RootCard {
       throw new Error("INVALID Mock Root Card");
     }
     this.id = mockObj.id;
+    if (parseInt(mockObj.id.split("#")[1]) > RootCard.id)
+      RootCard.id = parseInt(mockObj.id.split("#")[1]) + 1;
     //name = mockObj.name;
     //cost = mockObj.cost;
     this.is_face_down = mockObj.ifd;
@@ -148,13 +161,17 @@ class RootCard {
       this.activate_when_end_buy_phase = mockObj.awebp;
       this.activate_when_start_cleanup = mockObj.awscu;
       this.activate_when_end_turn = mockObj.awet;
+      this.activate_when_end_your_turn = mockObj.awdyt;
       this.activate_when_end_game = mockObj.aweg;
 
       this.activate_when_another_attacks = mockObj.awaa;
       this.activate_when_another_gains = mockObj.awag;
       this.activate_first_when_another_plays = mockObj.afwap;
 
+      this.activate_first_when_play = mockObj.afwpplay;
       this.activate_when_play = mockObj.awplay;
+      this.activate_on_play = mockObj.aoplay;
+      this.activate_after_play = mockObj.afplay;
       this.activate_when_gain = mockObj.awgain;
       this.activate_when_discard = mockObj.awdiscard;
       this.activate_when_trash = mockObj.awtrash;
@@ -198,14 +215,17 @@ class Card extends RootCard {
     GATHERING: "Gathering",
     CASTLE: "Castle",
   };
-  constructor(name, cost, type, expansion, player) {
+  constructor(name, cost, type, expansion) {
     let type1 = type ? type.split(" ") : [];
-    super(name, cost, type1, expansion, player);
+    super(name, cost, type1, expansion);
 
     //TODO: face up when set aside  // Use for Prepare
   }
   getInitAmount() {
     return 10;
+  }
+  getCardBack() {
+    return "./img/Basic/Back.JPG";
   }
   play() {}
   do_action() {}
@@ -267,17 +287,35 @@ class Cost {
   getCoin() {
     return this.coin;
   }
+  addCoin(value) {
+    this.coin += value;
+    this.coin = this.coin > 0 ? this.coin : 0;
+  }
   getDebt() {
     return this.debt;
+  }
+  addDebt(value) {
+    this.debt += value;
+    this.debt = this.debt > 0 ? this.debt : 0;
   }
   getPotion() {
     return this.potion;
   }
+  addPotion(value) {
+    this.potion += value;
+    this.potion = this.potion > 0 ? this.potion : 0;
+  }
   addCost(cost) {
     Cost.checkValidCost(cost);
-    this.coin += cost.coin;
-    this.debt += cost.debt;
-    this.potion += cost.potion;
+    this.addCoin(cost.coin);
+    this.addDebt(cost.debt);
+    this.addPotion(cost.potion);
+  }
+  subtractCost(cost) {
+    Cost.checkValidCost(cost);
+    this.addCoin(-1 * cost.coin);
+    this.addDebt(-1 * cost.debt);
+    this.addPotion(-1 * cost.potion);
   }
   sufficientToBuy(cost) {
     Cost.checkValidCost(cost);

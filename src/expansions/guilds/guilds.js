@@ -28,22 +28,24 @@ import {
   attack_other,
   message_other,
   revealCardList,
+  discardCardList,
 } from "../../game_logic/Activity.js";
 import { setInstruction } from "../../features/PlayerSide/Instruction.jsx";
 import { opponentManager } from "../../features/OpponentSide/Opponent.js";
 import { getClassFromName } from "../../setup.js";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 
 /*
 Mẫu
 class  extends Card{
-    constructor(player){
-        super("", , Card.Type.ACTION, "Guilds/", player);
+    constructor(){
+        super("", , Card.Type.ACTION, "Guilds/", );
     }
     play(){} 
 }
 
 */
-function get_overpay_amount(player) {
+function get_overpay_amount() {
   return new Promise((resolve) => {
     create_number_picker(
       0,
@@ -61,8 +63,8 @@ function get_overpay_amount(player) {
   });
 }
 class CandlestickMaker extends Card {
-  constructor(player) {
-    super("CandlestickMaker", new Cost(2), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("CandlestickMaker", new Cost(2), Card.Type.ACTION, "Guilds/");
   }
   async play() {
     await getBasicStats().addAction(1);
@@ -71,8 +73,8 @@ class CandlestickMaker extends Card {
   }
 }
 class Stonemason extends Card {
-  constructor(player) {
-    super("Stonemason", new Cost(2), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Stonemason", new Cost(2), Card.Type.ACTION, "Guilds/");
   }
   play() {
     if (getHand().length() <= 0) return;
@@ -94,9 +96,9 @@ class Stonemason extends Card {
             await trash_card(card);
           }
           getButtonPanel().clear_buttons();
-          await this.play_step1(card.cost);
+          await this.play_step1(getCost(card));
           resolve("Stonemason finish");
-        },
+        }.bind(this),
         "trash"
       );
     });
@@ -163,8 +165,8 @@ class Stonemason extends Card {
 }
 
 class Doctor extends Card {
-  constructor(player) {
-    super("Doctor", new Cost(3), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Doctor", new Cost(3), Card.Type.ACTION, "Guilds/");
     this.description =
       "Name a card. Reveal the top 3 cards of your deck. Trash the matches. Put the rest back in any order. Overpay: Per $1 overpaid, look at the top card of your deck; trash it, discard it, or put it back.";
   }
@@ -243,23 +245,23 @@ class Doctor extends Card {
   }
 }
 class Masterpiece extends Card {
-  constructor(player) {
-    super("Masterpiece", new Cost(3), Card.Type.TREASURE, "Guilds/", player);
+  constructor() {
+    super("Masterpiece", new Cost(3), Card.Type.TREASURE, "Guilds/");
   }
   async play() {
     await getBasicStats().addCoin(1);
   }
   async is_buyed() {
     getButtonPanel().clear_buttons();
-    let value = await get_overpay_amount(this.player);
+    let value = await get_overpay_amount();
     for (let i = 0; i < value; i++) {
       await gain_card_name("Silver");
     }
   }
 }
 class Advisor extends Card {
-  constructor(player) {
-    super("Advisor", new Cost(4), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Advisor", new Cost(4), Card.Type.ACTION, "Guilds/");
     this.description =
       "Reveal the top 3 cards of your deck. The player to your left chooses one of them. Discard that card and put the rest into your hand.";
   }
@@ -330,8 +332,8 @@ class Advisor extends Card {
   }
 }
 class Herald extends Card {
-  constructor(player) {
-    super("Herald", new Cost(4), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Herald", new Cost(4), Card.Type.ACTION, "Guilds/");
     this.description =
       "Reveal the top card of your deck. If it's an Action, play it. Overpay: Per $1 overpaid, put any card from your discard pile onto your deck.";
   }
@@ -344,7 +346,7 @@ class Herald extends Card {
     if (getDeck().length() <= 0) return;
     let card = await getDeck().pop();
     await reveal_card(card);
-    if (card.type.includes("Action")) {
+    if (getType(card).includes(Card.Type.ACTION)) {
       await play_card(card);
     } else {
       await discard_card(card, false);
@@ -396,8 +398,8 @@ class Herald extends Card {
   }
 }
 class Plaza extends Card {
-  constructor(player) {
-    super("Plaza", new Cost(4), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Plaza", new Cost(4), Card.Type.ACTION, "Guilds/");
   }
   async play() {
     await getBasicStats().addAction(2);
@@ -419,7 +421,7 @@ class Plaza extends Card {
       });
       let is_marked = getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.TREASURE) && chosen === 0;
+          return getType(card).includes(Card.Type.TREASURE) && chosen === 0;
         },
         async function (card) {
           clearFunc();
@@ -437,13 +439,12 @@ class Plaza extends Card {
   }
 }
 class Taxman extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Taxman",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.ATTACK,
-      "Guilds/",
-      player
+      "Guilds/"
     );
     this.description =
       "You may trash a Treasure from your hand. Each other player with 5 or more cards in hand discards a copy of it (or reveals they can't). Gain a Treasure onto your deck costing up to $3 more than it.";
@@ -466,7 +467,7 @@ class Taxman extends Card {
       });
       let is_marked = getHand().mark_cards(
         function (card) {
-          return card.type.includes(Card.Type.TREASURE) && chosen === 0;
+          return getType(card).includes(Card.Type.TREASURE) && chosen === 0;
         },
         async function (card) {
           chosen += 1;
@@ -474,7 +475,7 @@ class Taxman extends Card {
           await trash_card(card);
           let message = card.name;
           await this.attack(message);
-          await this.play_step1(card.cost);
+          await this.play_step1(getCost(card));
           resolve("Taxman finish");
         }.bind(this),
         "trash"
@@ -493,7 +494,7 @@ class Taxman extends Card {
           return (
             cost.isGreaterOrEqual(pile.getCost()) &&
             pile.getQuantity() > 0 &&
-            pile.getType().includes("Treasure")
+            pile.getType().includes(Card.Type.TREASURE)
           );
         },
         async function (pile) {
@@ -530,8 +531,8 @@ class Taxman extends Card {
   }
 }
 class Baker extends Card {
-  constructor(player) {
-    super("Baker", new Cost(5), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Baker", new Cost(5), Card.Type.ACTION, "Guilds/");
   }
   async play() {
     await draw1();
@@ -543,8 +544,8 @@ class Baker extends Card {
   }
 }
 class Butcher extends Card {
-  constructor(player) {
-    super("Butcher", new Cost(5), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Butcher", new Cost(5), Card.Type.ACTION, "Guilds/");
   }
   async play() {
     await getBasicStats().addCoffer(2);
@@ -569,7 +570,7 @@ class Butcher extends Card {
             chosen += 1;
             clearFunc();
             await trash_card(card);
-            await this.play_step1(card.cost);
+            await this.play_step1(getCost(card));
           }
           resolve("Butcher finish");
         }.bind(this),
@@ -602,8 +603,8 @@ class Butcher extends Card {
   }
 }
 class Journeyman extends Card {
-  constructor(player) {
-    super("Journeyman", new Cost(5), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("Journeyman", new Cost(5), Card.Type.ACTION, "Guilds/");
     this.description =
       "Name a card. Reveal cards from your deck until you reveal 3 cards without that name. Put those cards into your hand and discard the rest.";
   }
@@ -625,9 +626,7 @@ class Journeyman extends Card {
       }
     }
     await getHand().addCardList(card_list);
-    while (discard_list.length > 0) {
-      await discard_card(discard_list.pop(), false);
-    }
+    await discardCardList(discard_list, false);
   }
   play_step1() {
     return new Promise((resolve) => {
@@ -638,8 +637,8 @@ class Journeyman extends Card {
   }
 }
 class MerchantGuild extends Card {
-  constructor(player) {
-    super("MerchantGuild", new Cost(5), Card.Type.ACTION, "Guilds/", player);
+  constructor() {
+    super("MerchantGuild", new Cost(5), Card.Type.ACTION, "Guilds/");
     this.activate_when_end_buy_phase = true;
     this.activate_when_in_play = true;
     this.description =
@@ -660,13 +659,12 @@ class MerchantGuild extends Card {
   }
 }
 class Soothsayer extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Soothsayer",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.ATTACK,
-      "Guilds/",
-      player
+      "Guilds/"
     );
   }
   async play() {

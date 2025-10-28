@@ -1,10 +1,11 @@
 import { Card, Cost } from "../cards.js";
 import {
   REASON_START_TURN,
-  REASON_WHEN_PLAY,
   REASON_WHEN_GAIN,
   REASON_WHEN_ANOTHER_GAIN,
   effectBuffer,
+  REASON_FIRST_WHEN_PLAY,
+  REASON_WHEN_DISCARD,
 } from "../../game_logic/ReactionEffectManager.js";
 import { getPlayer } from "../../player.js";
 import {
@@ -41,6 +42,8 @@ import {
   exile_card,
   attack_other,
   mayPlayCardFromHand,
+  discardCardList,
+  revealCardList,
 } from "../../game_logic/Activity.js";
 import {
   PHASE_ACTION,
@@ -52,20 +55,22 @@ import {
 import { setInstruction } from "../../features/PlayerSide/Instruction.jsx";
 import { opponentManager } from "../../features/OpponentSide/Opponent.js";
 import audioManager from "../../Audio/audioManager.js";
+import { getGameState } from "../../game_logic/GameState.js";
+import { getCost, getType } from "../../game_logic/basicCardFunctions.js";
 
 /*
 Mẫu
 class  extends Card{
-    constructor(player){
-        super("", , Card.Type.ACTION, "Menagerie/", player);
+    constructor(){
+        super("", , Card.Type.ACTION, "Menagerie/");
     }
     play(){} 
 }
 */
 
 class Horse extends Card {
-  constructor(player) {
-    super("Horse", new Cost(3), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Horse", new Cost(3), Card.Type.ACTION, "Menagerie/");
   }
   getInitAmount() {
     return 30;
@@ -85,8 +90,8 @@ class Horse extends Card {
   }
 }
 class Supplies extends Card {
-  constructor(player) {
-    super("Supplies", new Cost(2), Card.Type.TREASURE, "Menagerie/", player);
+  constructor() {
+    super("Supplies", new Cost(2), Card.Type.TREASURE, "Menagerie/");
   }
   async play() {
     await getBasicStats().addCoin(1);
@@ -95,13 +100,12 @@ class Supplies extends Card {
   }
 }
 class Sleigh extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Sleigh",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.REACTION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.activate_when_in_hand = true;
     this.activate_when_gain = true;
@@ -214,8 +218,8 @@ class Sleigh extends Card {
   }
 }
 class Scrap extends Card {
-  constructor(player) {
-    super("Scrap", new Cost(3), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Scrap", new Cost(3), Card.Type.ACTION, "Menagerie/");
   }
   play() {
     if (getHand().length() <= 0) return;
@@ -235,7 +239,7 @@ class Scrap extends Card {
             this.chosen += 1;
             this.trash_card = card;
             getHand().remove_mark();
-            this.activity_count = Math.min(card.cost.coin, 6);
+            this.activity_count = Math.min(getCost(card).coin, 6);
             await trash_card(card);
 
             if (this.activity_count <= 0) resolve("Scrap finish");
@@ -361,8 +365,8 @@ class Scrap extends Card {
   }
 }
 class Cavalry extends Card {
-  constructor(player) {
-    super("Cavalry", new Cost(4), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Cavalry", new Cost(4), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await gain_card_name("Horse");
@@ -375,28 +379,28 @@ class Cavalry extends Card {
   }
 }
 class Groom extends Card {
-  constructor(player) {
-    super("Groom", new Cost(4), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Groom", new Cost(4), Card.Type.ACTION, "Menagerie/");
   }
   play() {
     return new Promise((resolve) => {
       markSupplyPile(
         function (pile) {
           let cost = new Cost(4);
-          return (
-            cost.isGreaterOrEqual(pile.getCost()) && pile.getQuantity() > 0
+          return cost.isGreaterOrEqual(
+            pile.getQuantity() > 0 && pile.getCost()
           );
         },
         async function (pile) {
           removeMarkSupplyPile();
           let new_card = await gain_card(pile);
-          if (new_card.type.includes(Card.Type.ACTION)) {
+          if (getType(new_card).includes(Card.Type.ACTION)) {
             gain_card_name("Horse");
           }
-          if (new_card.type.includes(Card.Type.TREASURE)) {
+          if (getType(new_card).includes(Card.Type.TREASURE)) {
             gain_card_name("Silver");
           }
-          if (new_card.type.includes(Card.Type.VICTORY)) {
+          if (getType(new_card).includes(Card.Type.VICTORY)) {
             await draw1();
             await getBasicStats().addAction(1);
           }
@@ -407,61 +411,57 @@ class Groom extends Card {
   }
 }
 class Hostelry extends Card {
-  constructor(player) {
-    super("Hostelry", new Cost(4), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Hostelry", new Cost(4), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await draw1();
     await getBasicStats().addAction(2);
   }
   is_gained() {
+    if (getHand().length() <= 0) return;
     return new Promise((resolve) => {
-      if (getHand().length() > 0) {
-        this.chosen = 0;
-        this.card_list = [];
-        getHand()
-          .getCardAll()
-          .forEach((c) => (c.hostelry = undefined));
-        getButtonPanel().clear_buttons();
-        getButtonPanel().add_button(
-          "Confirm Discard",
-          async function () {
-            if (this.chosen > 0) {
-              for (let i = 0; i < this.card_list.length; i++) {
-                let card = this.card_list[i];
-                await discard_card(card);
-                await reveal_card(card);
-              }
-              for (let i = 0; i < this.chosen; i++) {
-                await gain_card_name("Horse");
-              }
+      this.chosen = 0;
+      this.card_list = [];
+      getHand()
+        .getCardAll()
+        .forEach((c) => (c.hostelry = undefined));
+      getButtonPanel().clear_buttons();
+      getButtonPanel().add_button(
+        "Confirm Discard",
+        async function () {
+          if (this.chosen > 0) {
+            await discardCardList(this.card_list);
+            await revealCardList(this.card_list);
+            for (let i = 0; i < this.chosen; i++) {
+              await gain_card_name("Horse");
             }
-            getButtonPanel().clear_buttons();
-            resolve("Hostelry finish");
-          }.bind(this)
-        );
-
-        let is_marked = getHand().mark_cards(
-          function (card) {
-            return card.type.includes(Card.Type.TREASURE);
-          },
-          function (card) {
-            this.chosen += 1;
-            this.card_list.push(card);
-            card.hostelry = true;
-          }.bind(this),
-          "discard"
-        );
-        if (!is_marked) {
+          }
+          getButtonPanel().clear_buttons();
           resolve("Hostelry finish");
-        }
+        }.bind(this)
+      );
+
+      let is_marked = getHand().mark_cards(
+        function (card) {
+          return getType(card).includes(Card.Type.TREASURE);
+        },
+        function (card) {
+          this.chosen += 1;
+          this.card_list.push(card);
+          card.hostelry = true;
+        }.bind(this),
+        "discard"
+      );
+      if (!is_marked) {
+        resolve("Hostelry finish");
       }
     });
   }
 }
 class Livery extends Card {
-  constructor(player) {
-    super("Livery", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Livery", new Cost(5), Card.Type.ACTION, "Menagerie/");
     this.activate_when_gain = true;
     this.activate_when_in_play = true;
     this.description =
@@ -473,7 +473,9 @@ class Livery extends Card {
   should_activate(reason, card) {
     let cost = new Cost(4);
     return (
-      reason === REASON_WHEN_GAIN && card && card.cost.isGreaterOrEqual(cost)
+      reason === REASON_WHEN_GAIN &&
+      card &&
+      getCost(card).isGreaterOrEqual(cost)
     );
   }
   async activate(reason, card) {
@@ -483,8 +485,8 @@ class Livery extends Card {
   }
 }
 class Paddock extends Card {
-  constructor(player) {
-    super("Paddock", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Paddock", new Cost(5), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await getBasicStats().addCoin(2);
@@ -497,14 +499,17 @@ class Paddock extends Card {
 }
 
 class CamelTrain extends Card {
-  constructor(player) {
-    super("CamelTrain", new Cost(3), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("CamelTrain", new Cost(3), Card.Type.ACTION, "Menagerie/");
   }
   play() {
     return new Promise((resolve) => {
       markSupplyPile(
         function (pile) {
-          return !pile.getType().includes("Victory") && pile.getQuantity() > 0;
+          return (
+            pile.getQuantity() > 0 &&
+            !pile.getType().includes(Card.Type.VICTORY)
+          );
         },
         async function (pile) {
           removeMarkSupplyPile();
@@ -532,8 +537,8 @@ class CamelTrain extends Card {
   }
 }
 class StockPile extends Card {
-  constructor(player) {
-    super("StockPile", new Cost(3), Card.Type.TREASURE, "Menagerie/", player);
+  constructor() {
+    super("StockPile", new Cost(3), Card.Type.TREASURE, "Menagerie/");
   }
   async play() {
     await getBasicStats().addCoin(3);
@@ -543,8 +548,8 @@ class StockPile extends Card {
   }
 }
 class BountyHunter extends Card {
-  constructor(player) {
-    super("BountyHunter", new Cost(4), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("BountyHunter", new Cost(4), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await getBasicStats().addAction(1);
@@ -574,13 +579,12 @@ class BountyHunter extends Card {
   }
 }
 class Cardinal extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Cardinal",
       new Cost(4),
       Card.Type.ACTION + " " + Card.Type.ATTACK,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
   }
   async play() {
@@ -600,8 +604,8 @@ class Cardinal extends Card {
       let minCost = new Cost(3),
         maxCost = new Cost(6);
       if (
-        card.cost.isGreaterOrEqual(minCost) &&
-        maxCost.isGreaterOrEqual(card.cost)
+        getCost(card).isGreaterOrEqual(minCost) &&
+        maxCost.isGreaterOrEqual(getCost(card))
       ) {
         to_exile_card_list.push(card);
       } else {
@@ -645,13 +649,12 @@ class Cardinal extends Card {
   }
 }
 class Coven extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Coven",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.ATTACK,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.description =
       "Each other player Exiles a Curse from the Supply. If they can't, they discard their Exiled Curses.";
@@ -686,8 +689,8 @@ class Coven extends Card {
   }
 }
 class Displace extends Card {
-  constructor(player) {
-    super("Displace", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Displace", new Cost(5), Card.Type.ACTION, "Menagerie/");
   }
   play() {
     if (getHand().length() <= 0) return;
@@ -716,7 +719,7 @@ class Displace extends Card {
   }
   play_step2(card_name) {
     let cost = new Cost(2);
-    cost.addCost(this.card.cost);
+    cost.addCost(getCost(this.card));
     if (!this.card || !cost) return;
     return new Promise((resolve) => {
       markSupplyPile(
@@ -737,13 +740,12 @@ class Displace extends Card {
   }
 }
 class Gatekeeper extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Gatekeeper",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION + " " + Card.Type.ATTACK,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -770,28 +772,12 @@ class Gatekeeper extends Card {
     this.activate_when_gain = true;
 
     this.turn = getPlayer().turn;
-
-    //getPlayer().is_attacked_by_gatekeeper = true;
-    /*
-        //Only attack if they dont have an Exiled copy of
-        if(!(getPlayer().phase === PHASE_REACTION || getPlayer().phase === PHASE_WAITING)){
-            let cards_gained = getPlayer().gameState.cards_gained_this_turn;
-            if(cards_gained.length < 0) return;
-            let card = cards_gained[cards_gained.length - 1];
-            if(!getExile().has_card(c => c.name === card.name) && getDiscard().has_card(c => c.id === card.id)){
-                const removed = await getDiscard().remove(card);
-                if(removed){
-                    await exile_card(card);
-                }                
-            }
-        }
-            */
   }
   should_activate(reason, card, activity, cardLocationTrack) {
     if (reason === REASON_START_TURN) return true;
     if (reason !== REASON_WHEN_GAIN) return false;
 
-    if (this.turn + 1 !== getPlayer().turn) {
+    if (this.turn + 1 < getPlayer().turn) {
       effectBuffer.removeCardById(this.id);
       this.activate_when_gain = false;
       return false;
@@ -799,8 +785,8 @@ class Gatekeeper extends Card {
 
     return (
       card &&
-      (card.type.includes(Card.Type.TREASURE) ||
-        card.type.includes(Card.Type.ACTION)) &&
+      (getType(card).includes(Card.Type.TREASURE) ||
+        getType(card).includes(Card.Type.ACTION)) &&
       !getExile().has_card((c) => c.name === card.name)
     );
   }
@@ -825,8 +811,8 @@ class Gatekeeper extends Card {
 }
 
 class Sanctuary extends Card {
-  constructor(player) {
-    super("Sanctuary", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Sanctuary", new Cost(5), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await draw1();
@@ -861,13 +847,12 @@ class Sanctuary extends Card {
 }
 
 class BlackCat extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "BlackCat",
       new Cost(2),
       Card.Type.ACTION + " " + Card.Type.ATTACK + " " + Card.Type.REACTION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.activate_when_another_gains = true;
     this.activate_when_in_hand = true;
@@ -893,7 +878,7 @@ class BlackCat extends Card {
     return (
       reason === REASON_WHEN_ANOTHER_GAIN &&
       card &&
-      card.type.includes(Card.Type.VICTORY)
+      getType(card).includes(Card.Type.VICTORY)
     );
   }
   activate(reason, card) {
@@ -916,8 +901,8 @@ class BlackCat extends Card {
   }
 }
 class Goatherd extends Card {
-  constructor(player) {
-    super("Goatherd", new Cost(3), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Goatherd", new Cost(3), Card.Type.ACTION, "Menagerie/");
     this.description =
       "You may trash a card from your hand.+1 Card per card the player to your right trashed on their last turn.";
   }
@@ -967,13 +952,12 @@ class Goatherd extends Card {
   }
 }
 class Sheepdog extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Sheepdog",
       new Cost(3),
       Card.Type.ACTION + " " + Card.Type.REACTION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.activate_when_gain = true;
     this.activate_when_in_hand = true;
@@ -1006,8 +990,8 @@ class Sheepdog extends Card {
   }
 }
 class SnowyVillage extends Card {
-  constructor(player) {
-    super("SnowyVillage", new Cost(3), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("SnowyVillage", new Cost(3), Card.Type.ACTION, "Menagerie/");
     this.description = "Ignore any further +Actions you get this turn.";
   }
   async play() {
@@ -1018,26 +1002,36 @@ class SnowyVillage extends Card {
   }
 }
 class VillageGreen extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "VillageGreen",
       new Cost(4),
       `${Card.Type.ACTION} ${Card.Type.DURATION} ${Card.Type.REACTION}`,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = true;
     this.activate_when_in_play = true;
+
+    this.activate_when_discard = true;
     this.description =
       "When you discard this other than during Clean-up, you may play it.";
   }
   play() {
     return new Promise((resolve) => {
+      let clearFunc = function () {
+        getButtonPanel().clear_buttons();
+        setInstruction("");
+      };
       getButtonPanel().clear_buttons();
+      setInstruction(
+        `${this.name}: Either now or at the start of your next turn: +1Card and +2Actions`
+      );
+
       getButtonPanel().add_button(
         "NOW",
         async function () {
+          clearFunc();
           await this.play_step1();
           this.not_discard_in_cleanup = false;
           resolve();
@@ -1046,6 +1040,7 @@ class VillageGreen extends Card {
       getButtonPanel().add_button(
         "NEXT TURN",
         function () {
+          clearFunc();
           this.not_discard_in_cleanup = true;
           resolve();
         }.bind(this)
@@ -1056,43 +1051,59 @@ class VillageGreen extends Card {
     await draw1();
     await getBasicStats().addAction(2);
   }
-  is_discarded() {
+
+  should_activate(reason, card) {
+    return (
+      reason === REASON_START_TURN ||
+      (reason === REASON_WHEN_DISCARD &&
+        card &&
+        card.id === this.id &&
+        getPlayer().phase !== PHASE_CLEAN_UP)
+    );
+  }
+  async activate(reason, card) {
+    if (reason === REASON_START_TURN) {
+      await this.play_step1();
+      this.not_discard_in_cleanup = false;
+    } else if (reason === REASON_WHEN_DISCARD) {
+      await this.activate_step1();
+    }
+  }
+  activate_step1() {
     if (getPlayer().phase !== PHASE_CLEAN_UP) {
       if (!getDiscard().hasCardId(this.id)) return;
       return new Promise((resolve) => {
+        let clearFunc = function () {
+          getButtonPanel().clear_buttons();
+          setInstruction("");
+        };
         getButtonPanel().clear_buttons();
+        setInstruction(`${this.name}: You may reveal this to play this.`);
+
         getButtonPanel().add_button(
           "Play VillageGreen",
           async function () {
-            getButtonPanel().clear_buttons();
-            await getHand().remove(this);
-            await play_card(this);
+            clearFunc();
+            let removed = await getDiscard().remove(this);
+            if (removed) await play_card(this);
             resolve("Pirate activate step 1 finish");
           }.bind(this)
         );
-        getButtonPanel().add_button("Cancel", function () {
-          getButtonPanel().clear_buttons();
+        getButtonPanel().add_button("Decline", function () {
+          clearFunc();
           resolve("Pirate activate step 1 finish");
         });
       });
     }
   }
-  should_activate(reason, card) {
-    return reason === REASON_START_TURN;
-  }
-  async activate(reaason, card) {
-    await this.play_step1();
-    this.not_discard_in_cleanup = false;
-  }
 }
 class Barge extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Barge",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = true;
@@ -1131,13 +1142,12 @@ class Barge extends Card {
   }
 }
 class Falconer extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Falconer",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.REACTION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.activate_when_another_gains = true;
     this.activate_when_gain = true;
@@ -1153,7 +1163,8 @@ class Falconer extends Card {
       markSupplyPile(
         function (pile) {
           return (
-            this.cost.isGreaterThan(pile.getCost()) && pile.getQuantity() > 0
+            pile.getQuantity() > 0 &&
+            getCost(this).isGreaterThan(pile.getCost())
           );
         }.bind(this),
         async function (pile) {
@@ -1168,8 +1179,8 @@ class Falconer extends Card {
     return (
       (reason === REASON_WHEN_ANOTHER_GAIN || reason === REASON_WHEN_GAIN) &&
       card &&
-      card.type.length &&
-      card.type.length >= 2
+      getType(card).length &&
+      getType(card).length >= 2
     );
   }
   activate(reason, card) {
@@ -1192,8 +1203,8 @@ class Falconer extends Card {
   }
 }
 class HuntingLodge extends Card {
-  constructor(player) {
-    super("HuntingLodge", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("HuntingLodge", new Cost(5), Card.Type.ACTION, "Menagerie/");
   }
   async play() {
     await draw1();
@@ -1202,9 +1213,9 @@ class HuntingLodge extends Card {
     return new Promise((resolve) => {
       getButtonPanel().clear_buttons();
       getButtonPanel().add_button("Discard Hand", async function () {
-        while (getHand().length() > 0) {
-          let card = await getHand().pop();
-          await discard_card(card, false);
+        if (getHand().length() > 0) {
+          await discardCardList(getHand().getCardAll(), true);
+          await getHand().setCardAll([]);
         }
         await drawNCards(5);
         resolve("HuntingLodge finish");
@@ -1216,41 +1227,27 @@ class HuntingLodge extends Card {
   }
 }
 class Kiln extends Card {
-  constructor(player) {
-    super("Kiln", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Kiln", new Cost(5), Card.Type.ACTION, "Menagerie/");
     this.turn = -1;
-    this.activate_when_play = true;
+    this.activate_first_when_play = false;
     this.activate_when_in_play = false;
-    this.chosen_id = -1;
     this.description =
       "The next time you play a card this turn, you may first gain a copy of it.";
-    // TODO: Kiln when play with ThroneRoom
   }
   async play() {
     await getBasicStats().addCoin(2);
     this.turn = getPlayer().turn;
-    this.chosen_id = -1;
+    this.activate_first_when_play = true;
     this.activate_when_in_play = true;
   }
   should_activate(reason, card) {
-    //Phuc tap qua, lam giong Charm cho de
-    if (!(reason === REASON_WHEN_PLAY && card && card.id !== this.id))
-      return false;
-    if (this.chosen_id === -1) {
-      this.chosen_id = card.id;
-    } else if (this.chosen_id === card.id) {
-    } else {
-      this.chosen_id = -1;
-      this.activate_when_in_play = false;
-      return false;
-    }
-    return findSupplyPile(
-      (pile) => pile.getQuantity() > 0 && pile.getNextCard().name === card.name
-    );
+    return reason === REASON_FIRST_WHEN_PLAY && this.turn === getPlayer().turn;
   }
   activate(reason, card) {
-    this.activate_when_in_play = false;
-    this.chosen_id = -1;
+    this.activate_first_when_play = false;
+    this.turn = -1;
+
     let pile = findSupplyPile(
       (pile) => pile.getQuantity() > 0 && pile.getNextCard().name === card.name
     );
@@ -1265,7 +1262,7 @@ class Kiln extends Card {
           resolve("Kiln activate finish");
         }.bind(this)
       );
-      getButtonPanel().add_button("Cancel", function () {
+      getButtonPanel().add_button("Decline", function () {
         getButtonPanel().clear_buttons();
         resolve("Kiln activate finish");
       });
@@ -1273,13 +1270,12 @@ class Kiln extends Card {
   }
 }
 class Mastermind extends Card {
-  constructor(player) {
+  constructor() {
     super(
       "Mastermind",
       new Cost(5),
       Card.Type.ACTION + " " + Card.Type.DURATION,
-      "Menagerie/",
-      player
+      "Menagerie/"
     );
     this.not_discard_in_cleanup = false;
     this.activate_when_start_turn = false;
@@ -1321,7 +1317,7 @@ class Mastermind extends Card {
 
       let mayPlayAction = mayPlayCardFromHand(
         function (card) {
-          return chosen === 0 && card.type.includes(Card.Type.ACTION);
+          return chosen === 0 && getType(card).includes(Card.Type.ACTION);
         },
         async function (card) {
           if (this.chosen === 0) {
@@ -1348,65 +1344,62 @@ class Mastermind extends Card {
         clearFunc();
         resolve();
       }
-
-      /*
-            let contain_action = getHand().mark_cards(
-                function(card){return chosen===0 && card.type.includes(Card.Type.ACTION);},
-                async function(card){
-                    if(this.chosen === 0){
-                        this.chosen += 1;
-                        this.chosen_id = card.id;
-                    }
-                    clearFunc();
-                    let removed = await getHand().remove(card);
-                    if(removed){
-                        await play_card(card);
-                        removed = await getPlayField().remove(card);
-                        if(removed){
-                            await play_card(card);  
-                            removed = await getPlayField().remove(card);
-                            if(removed) await play_card(card); 
-                        } 
-                    } 
-                    resolve('Mastermind finish');                       
-                }.bind(this),
-            'choose');
-            if(!contain_action) resolve('no action');
-            */
     });
   }
 }
 class Fisherman extends Card {
-  constructor(player) {
-    super("Fisherman", new Cost(5), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Fisherman", new Cost(5), Card.Type.ACTION, "Menagerie/");
     this.description =
       "During your turns, if your discard pile is empty, this card cost $3 less.";
   }
+  getCost() {
+    if (getDiscard().getLength() <= 0) {
+      let cost = new Cost(0);
+      cost.addCost(this.cost);
+      cost.addCoin(-3);
+      return cost;
+    }
+    return this.cost;
+  }
   async play() {
-    //TODO
     await draw1();
     await getBasicStats().addAction(1);
     await getBasicStats().addCoin(1);
   }
 }
 class Destrier extends Card {
-  constructor(player) {
-    super("Destrier", new Cost(6), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Destrier", new Cost(6), Card.Type.ACTION, "Menagerie/");
     this.description =
       "During your turn, this costs $1 less    per card you've gained this turn.";
   }
+  getCost() {
+    let gainCount = getGameState().cards_gained_this_turn.length;
+    let cost = new Cost(0);
+    cost.addCost(this.cost);
+    cost.addCoin(-1 * gainCount);
+    return cost;
+  }
   async play() {
-    //TODO
     await drawNCards(2);
     await getBasicStats().addAction(1);
   }
 }
 class Wayfarer extends Card {
-  constructor(player) {
-    super("Wayfarer", new Cost(6), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("Wayfarer", new Cost(6), Card.Type.ACTION, "Menagerie/");
     this.description =
       "+3 Cards You may gain a Silver. This has the same cost as the last other card gained this turn, if any.";
-    //TODO
+  }
+  getCost() {
+    if (getGameState().cards_gained_this_turn.length <= 0) return this.cost;
+    let lastGainCard = getGameState().cards_gained_this_turn[0];
+    if (!lastGainCard || !getCost(lastGainCard)) {
+      console.error(lastGainCard, getGameState().cards_gained_this_turn);
+      return this.cost;
+    }
+    return getCost(lastGainCard);
   }
   async play() {
     await drawNCards(3);
@@ -1425,8 +1418,8 @@ class Wayfarer extends Card {
   }
 }
 class AnimalFair extends Card {
-  constructor(player) {
-    super("AnimalFair", new Cost(7), Card.Type.ACTION, "Menagerie/", player);
+  constructor() {
+    super("AnimalFair", new Cost(7), Card.Type.ACTION, "Menagerie/");
     this.description =
       "+$4 +1 Buy per empty supply pile. Instead of paying this card's cost, you may trash an Action card from your hand.";
   }

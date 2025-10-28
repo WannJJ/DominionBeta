@@ -25,6 +25,8 @@ class NonSupplyPile extends Pile{
                     onContextMenu={(e)=>{e.preventDefault(); this.showCardList(true)}}>
                     {/*onContextMenu={(e)=>{e.preventDefault(); showCard(topCard)}}>*/}
             {this.state.name}
+            {this.state.debt_token > 0 
+                        && <div className='debt-token'>{this.state.debt_token}</div>}
             <div className='cards-count1'>{this.getQuantity()}</div>
         </div>;
     }
